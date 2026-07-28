@@ -28,11 +28,12 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "${GITHUB_REF_NAME}"
-          --verify-tag
-          --generate-notes
-          --title "PAM Native Nitro ${GITHUB_REF_NAME}"
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" \
+              --verify-tag \
+              --generate-notes \
+              --title "PAM Native Nitro ${GITHUB_REF_NAME}"
 
       - name: Publish on Packagist
         env:
@@ -45,12 +46,16 @@ jobs:
           username=$(php -r 'echo rawurlencode((string) getenv("PACKAGIST_USERNAME"));')
           token=$(php -r 'echo rawurlencode((string) getenv("PACKAGIST_TOKEN"));')
           endpoint="https://packagist.org/api"
-          if ! curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
-            --request POST --header 'Content-Type: application/json' \
-            --data "${payload}" \
-            "${endpoint}/update-package?username=${username}&apiToken=${token}"; then
+          request() {
             curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+              --retry 5 --retry-delay 2 --retry-all-errors \
               --request POST --header 'Content-Type: application/json' \
-              --data "${payload}" \
-              "${endpoint}/create-package?username=${username}&apiToken=${token}"
+              --data "${payload}" "$1"
+          }
+          update_url="${endpoint}/update-package?username=${username}&apiToken=${token}"
+          create_url="${endpoint}/create-package?username=${username}&apiToken=${token}"
+          if ! request "${update_url}"; then
+            if ! request "${create_url}"; then
+              request "${update_url}"
+            fi
           fi
