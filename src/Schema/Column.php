@@ -14,6 +14,7 @@ final readonly class Column
         public bool $indexed,
         public bool $nullable,
         public ?string $enum,
+        public bool $boolean,
     ) {
     }
 }

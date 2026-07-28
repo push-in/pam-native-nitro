@@ -77,6 +77,8 @@ final class ModelSchema
                 indexed: $definition->indexed,
                 nullable: $definition->nullable,
                 enum: $enum,
+                boolean: $property->getType() instanceof ReflectionNamedType
+                    && $property->getType()->getName() === 'bool',
             );
             $columns[] = $column;
             if ($isPrimary) {

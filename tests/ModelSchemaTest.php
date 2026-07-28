@@ -29,21 +29,23 @@ final class ModelSchemaTest extends TestCase
         $message = Message::hydrate([
             'id' => 'm1',
             'chat_id' => 'c1',
-            'body' => 'PAM Nitro',
+            'body' => 'PAM Native Nitro',
             'type' => 2,
             'created_at' => 123,
+            'pending' => 1,
         ]);
 
         self::assertSame(MessageType::Image, $message->type);
         self::assertSame('c1', $message->chatId);
         self::assertSame(2, $message->attributes()['type']);
+        self::assertTrue($message->pending);
     }
 
     public function testInitializesChildrenRelationsOnceWithTheModel(): void
     {
         $post = Post::hydrate([
             'id' => 'c1',
-            'body' => 'PAM Nitro',
+            'body' => 'PAM Native Nitro',
         ]);
 
         self::assertArrayHasKey('messages', ModelSchema::for(Post::class)->relations);

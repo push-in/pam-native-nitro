@@ -61,6 +61,8 @@ abstract class Model
                 $value = $column->enum::from(
                     is_int($value) ? $value : (int) $value,
                 );
+            } elseif ($column->boolean && $value !== null) {
+                $value = (bool) $value;
             }
             $model->{$column->property} = $value;
         }
