@@ -26,6 +26,9 @@ final class Message extends Model
     #[Field(indexed: true)]
     public int $createdAt;
 
+    #[Field]
+    public bool $pending;
+
     public static function table(): string
     {
         return 'messages';

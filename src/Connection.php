@@ -30,4 +30,15 @@ final readonly class Connection
     {
         return SQLite::query($this->database, $sql, $arguments, $callback);
     }
+
+    /**
+     * @param list<list<string|int|float|bool|null>> $argumentSets
+     */
+    public function executeMany(
+        string $sql,
+        array $argumentSets,
+        ?Closure $callback = null,
+    ): int {
+        return SQLite::executeMany($this->database, $sql, $argumentSets, $callback);
+    }
 }

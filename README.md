@@ -1,8 +1,8 @@
-# PAM Nitro
+# PAM Native Nitro
 
-**Reactive, offline-first data at native speed.**
+**Offline-first data at native speed.**
 
-PAM Nitro is the high-performance local data engine for PAM Native. It keeps
+PAM Native Nitro is the high-performance local data engine for PAM Native. It keeps
 application startup independent from database size by querying lazily on a
 native worker and materializing only the records a screen needs.
 
@@ -21,8 +21,19 @@ native worker and materializing only the records a screen needs.
 - No JavaScript, JSI, ORM proxies, or runtime code generation.
 
 WatermelonDB demonstrated the right mobile principle: keep queries native,
-lazy, asynchronous, and observable. PAM Nitro applies that principle to PAM's
+lazy, asynchronous, and observable. PAM Native Nitro applies that principle to PAM's
 persistent PHP runtime with fewer transport layers.
+
+Read the [architecture](docs/architecture.md) and
+[benchmark protocol](docs/benchmarks.md) before evaluating performance claims.
+
+## Installation
+
+```bash
+composer require pushinbr/pam-native-nitro
+```
+
+PAM Native Nitro 0.1 requires PAM Native 0.5.4 or newer.
 
 ## Models
 
@@ -93,19 +104,24 @@ $chat->messages->get(function (array $messages): void {
 use Pam\Nitro\Nitro;
 
 Nitro::boot('zechat.db');
-Nitro::createTable(Message::class);
+Nitro::prepare([Message::class], function () use ($chatId): void {
+    Message::query()
+        ->where('chat_id', $chatId)
+        ->latest()
+        ->limit(20)
+        ->get(function (array $messages): void {
+            $this->messages = array_reverse($messages);
+        });
+});
 
-Message::query()
-    ->where('chat_id', $chatId)
-    ->latest()
-    ->limit(20)
-    ->get(function (array $messages): void {
-        $this->messages = array_reverse($messages);
-    });
+Nitro::saveMany($messages, function (): void {
+    // Thousands of upserts, one bridge call, one prepared statement,
+    // one native transaction.
+});
 ```
 
 ## Status
 
-PAM Nitro is under active development. The initial API is intentionally small
+PAM Native Nitro is under active development. The initial API is intentionally small
 while the binary bridge, batch writes, observation, migrations, relations, and
 benchmarks are hardened.

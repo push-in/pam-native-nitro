@@ -2,7 +2,7 @@
 
 Licensor: Pushin
 
-Licensed Work: PAM Nitro
+Licensed Work: PAM Native Nitro
 
 Additional Use Grant: You may use the Licensed Work to build and distribute
 applications made with PAM Native. You may not offer the Licensed Work itself
