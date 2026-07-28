@@ -6,6 +6,7 @@ namespace Pam\Nitro\Schema;
 
 use BackedEnum;
 use InvalidArgumentException;
+use Pam\Nitro\Attributes\Children;
 use Pam\Nitro\Attributes\Field;
 use Pam\Nitro\Attributes\PrimaryKey;
 use Pam\Nitro\Model;
@@ -16,12 +17,17 @@ use ReflectionProperty;
 
 final class ModelSchema
 {
-    /** @param class-string<Model> $model @param list<Column> $columns */
+    /**
+     * @param class-string<Model> $model
+     * @param list<Column> $columns
+     * @param array<string, Children> $relations
+     */
     private function __construct(
         public readonly string $model,
         public readonly string $table,
         public readonly array $columns,
         public readonly Column $primary,
+        public readonly array $relations,
     ) {
     }
 
@@ -45,9 +51,14 @@ final class ModelSchema
         $table = $model::table();
         self::assertIdentifier($table);
         $columns = [];
+        $relations = [];
         $primary = null;
 
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
+            $children = $property->getAttributes(Children::class)[0] ?? null;
+            if ($children !== null) {
+                $relations[$property->getName()] = $children->newInstance();
+            }
             $field = $property->getAttributes(Field::class)[0] ?? null;
             $isPrimary = $property->getAttributes(PrimaryKey::class) !== [];
             if ($field === null && !$isPrimary) {
@@ -80,7 +91,7 @@ final class ModelSchema
             throw new InvalidArgumentException("{$model} requires one #[PrimaryKey] property.");
         }
 
-        return new self($model, $table, $columns, $primary);
+        return new self($model, $table, $columns, $primary, $relations);
     }
 
     /** @return array{ColumnType, class-string<BackedEnum>|null} */
@@ -93,8 +104,13 @@ final class ModelSchema
         $name = $type->getName();
         if (enum_exists($name) && is_subclass_of($name, BackedEnum::class)) {
             $backing = (new ReflectionEnum($name))->getBackingType()?->getName();
+            if ($backing !== 'int') {
+                throw new InvalidArgumentException(
+                    "{$property->getName()} must use an integer-backed enum.",
+                );
+            }
 
-            return [$backing === 'int' ? ColumnType::Integer : ColumnType::Text, $name];
+            return [ColumnType::Integer, $name];
         }
 
         return [match ($name) {

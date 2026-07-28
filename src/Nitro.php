@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Pam\Nitro;
 
-use BackedEnum;
 use Closure;
 use LogicException;
 use Pam\Nitro\Schema\ColumnType;
@@ -55,7 +54,13 @@ final class Nitro
 
         return self::connection()->execute(
             'CREATE TABLE IF NOT EXISTS "'.$schema->table.'" ('.implode(', ', $columns).')',
-            callback: $callback,
+            callback: static function () use ($schema, $callback): void {
+                $indexes = array_values(array_filter(
+                    $schema->columns,
+                    static fn ($column): bool => $column->indexed && !$column->primary,
+                ));
+                self::createIndexes($schema->table, $indexes, 0, $callback);
+            },
         );
     }
 
@@ -76,10 +81,7 @@ final class Nitro
                 static fn (string $column): string => '"'.$column.'" = excluded."'.$column.'"',
                 $updates,
             ));
-        $arguments = array_values(array_map(
-            static fn (mixed $value): mixed => $value instanceof BackedEnum ? $value->value : $value,
-            $values,
-        ));
+        $arguments = array_values($values);
 
         return self::connection()->execute($sql, $arguments, $callback);
     }
@@ -88,6 +90,31 @@ final class Nitro
     {
         return self::$connection ?? throw new LogicException(
             'Call Nitro::boot() before querying models.',
+        );
+    }
+
+    /** @param list<\Pam\Nitro\Schema\Column> $indexes */
+    private static function createIndexes(
+        string $table,
+        array $indexes,
+        int $offset,
+        ?Closure $callback,
+    ): void {
+        $column = $indexes[$offset] ?? null;
+        if ($column === null) {
+            $callback?->__invoke();
+
+            return;
+        }
+        $name = 'nitro_'.$table.'_'.$column->name;
+        self::connection()->execute(
+            'CREATE INDEX IF NOT EXISTS "'.$name.'" ON "'.$table.'" ("'.$column->name.'")',
+            callback: static fn () => self::createIndexes(
+                $table,
+                $indexes,
+                $offset + 1,
+                $callback,
+            ),
         );
     }
 }

@@ -28,8 +28,10 @@ persistent PHP runtime with fewer transport layers.
 
 ```php
 use Pam\Nitro\Attributes\Field;
+use Pam\Nitro\Attributes\Children;
 use Pam\Nitro\Attributes\PrimaryKey;
 use Pam\Nitro\Model;
+use Pam\Nitro\Relations\ChildrenRelation;
 
 enum MessageType: int
 {
@@ -60,6 +62,29 @@ final class Message extends Model
         return 'messages';
     }
 }
+```
+
+Relations are declared once and stay lazy:
+
+```php
+final class Chat extends Model
+{
+    #[PrimaryKey]
+    #[Field]
+    public string $id;
+
+    #[Children(Message::class, foreignKey: 'chat_id')]
+    public ChildrenRelation $messages;
+
+    public static function table(): string
+    {
+        return 'chats';
+    }
+}
+
+$chat->messages->get(function (array $messages): void {
+    // Only this chat's rows cross the native boundary.
+});
 ```
 
 ## Use

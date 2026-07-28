@@ -8,6 +8,7 @@ use Pam\Nitro\Schema\ColumnType;
 use Pam\Nitro\Schema\ModelSchema;
 use Pam\Nitro\Tests\Fixtures\Message;
 use Pam\Nitro\Tests\Fixtures\MessageType;
+use Pam\Nitro\Tests\Fixtures\Post;
 use PHPUnit\Framework\TestCase;
 
 final class ModelSchemaTest extends TestCase
@@ -36,5 +37,17 @@ final class ModelSchemaTest extends TestCase
         self::assertSame(MessageType::Image, $message->type);
         self::assertSame('c1', $message->chatId);
         self::assertSame(2, $message->attributes()['type']);
+    }
+
+    public function testInitializesChildrenRelationsOnceWithTheModel(): void
+    {
+        $post = Post::hydrate([
+            'id' => 'c1',
+            'body' => 'PAM Nitro',
+        ]);
+
+        self::assertArrayHasKey('messages', ModelSchema::for(Post::class)->relations);
+        self::assertSame('c1', $post->id);
+        self::assertSame(1, count(ModelSchema::for(Post::class)->relations));
     }
 }

@@ -65,7 +65,7 @@ final class Query
             $arguments,
             function (array $rows) use ($callback): void {
                 $model = $this->model;
-                $callback(array_values(array_map($model::hydrate(...), $rows)));
+                $callback(array_map($model::hydrate(...), $rows));
             },
         );
     }

@@ -5,10 +5,22 @@ declare(strict_types=1);
 namespace Pam\Nitro;
 
 use BackedEnum;
+use Pam\Nitro\Relations\ChildrenRelation;
 use Pam\Nitro\Schema\ModelSchema;
 
 abstract class Model
 {
+    final public function __construct()
+    {
+        foreach (ModelSchema::for(static::class)->relations as $property => $relation) {
+            $this->{$property} = new ChildrenRelation(
+                $this,
+                $relation->model,
+                $relation->foreignKey,
+            );
+        }
+    }
+
     final public static function query(): Query
     {
         return Nitro::query(static::class);
@@ -39,7 +51,7 @@ abstract class Model
         return $values;
     }
 
-    /** @param array<string, mixed> $row */
+    /** @param array<string, string|int|float|bool|null> $row */
     final public static function hydrate(array $row): static
     {
         $model = new static();

@@ -17,7 +17,8 @@
         "pushinbr/pam-native": "^0.5.3"
     },
     "require-dev": {
-        "phpunit/phpunit": "^11.5"
+        "phpunit/phpunit": "^11.5",
+        "phpstan/phpstan": "^2.2"
     },
     "autoload": {
         "psr-4": {
@@ -31,6 +32,7 @@
     },
     "scripts": {
         "test": "phpunit",
+        "analyse": "phpstan analyse --configuration=phpstan.neon",
         "benchmark": "php benchmarks/cache.php"
     },
     "support": {
