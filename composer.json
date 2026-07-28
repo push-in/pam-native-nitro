@@ -1,0 +1,42 @@
+{
+    "name": "pushinbr/pam-nitro",
+    "description": "Ultra-fast reactive, offline-first data engine for PAM Native.",
+    "type": "library",
+    "license": "BUSL-1.1",
+    "keywords": [
+        "pam",
+        "pam-native",
+        "database",
+        "cache",
+        "sqlite",
+        "offline-first",
+        "reactive"
+    ],
+    "require": {
+        "php": "^8.4",
+        "pushinbr/pam-native": "^0.5.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Pam\\Nitro\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Pam\\Nitro\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "benchmark": "php benchmarks/cache.php"
+    },
+    "support": {
+        "issues": "https://github.com/push-in/pam-nitro/issues",
+        "source": "https://github.com/push-in/pam-nitro"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
