@@ -69,9 +69,11 @@ final class ModelSchema
             $name = $definition->name ?? self::snake($property->getName());
             self::assertIdentifier($name);
             [$type, $enum] = self::columnType($property);
+            $nullable = $definition->nullable
+                || ($property->getType()?->allowsNull() ?? false);
             $default = $property->hasDefaultValue()
                 ? $property->getDefaultValue()
-                : self::migrationDefault($type, $enum, $definition->nullable);
+                : self::migrationDefault($type, $enum, $nullable);
             if ($default instanceof BackedEnum) {
                 $default = $default->value;
             }
@@ -82,7 +84,7 @@ final class ModelSchema
                 type: $type,
                 primary: $isPrimary,
                 indexed: $definition->indexed,
-                nullable: $definition->nullable,
+                nullable: $nullable,
                 enum: $enum,
                 boolean: $property->getType() instanceof ReflectionNamedType
                     && $property->getType()->getName() === 'bool',

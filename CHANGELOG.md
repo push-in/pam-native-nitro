@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Infer nullable columns from nullable PHP property types, including enums.
+
 ## 0.3.0 - 2026-07-29
 
 - Add primary-key model deletion and explicitly scoped bulk deletion.

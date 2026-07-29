@@ -8,6 +8,7 @@ use Pam\Nitro\Schema\ColumnType;
 use Pam\Nitro\Schema\ModelSchema;
 use Pam\Nitro\Tests\Fixtures\Message;
 use Pam\Nitro\Tests\Fixtures\MessageType;
+use Pam\Nitro\Tests\Fixtures\NullableMessage;
 use Pam\Nitro\Tests\Fixtures\Post;
 use PHPUnit\Framework\TestCase;
 
@@ -56,5 +57,19 @@ final class ModelSchemaTest extends TestCase
         self::assertArrayHasKey('messages', ModelSchema::for(Post::class)->relations);
         self::assertSame('c1', $post->id);
         self::assertSame(1, count(ModelSchema::for(Post::class)->relations));
+    }
+
+    public function testInfersNullableEnumFromThePhpPropertyType(): void
+    {
+        $schema = ModelSchema::for(NullableMessage::class);
+        $column = $schema->columns[1];
+
+        self::assertTrue($column->nullable);
+        self::assertNull($column->default);
+        self::assertSame(MessageType::class, $column->enum);
+        self::assertNull(NullableMessage::hydrate([
+            'id' => 'nullable-1',
+            'delivery_state' => null,
+        ])->deliveryState);
     }
 }
