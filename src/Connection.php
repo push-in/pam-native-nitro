@@ -41,4 +41,16 @@ final readonly class Connection
     ): int {
         return SQLite::executeMany($this->database, $sql, $argumentSets, $callback);
     }
+
+    /**
+     * @param list<array{
+     *   sql: string,
+     *   arguments?: list<string|int|float|bool|null>,
+     *   argumentSets?: list<list<string|int|float|bool|null>>
+     * }> $statements
+     */
+    public function transaction(array $statements, ?Closure $callback = null): int
+    {
+        return SQLite::transaction($this->database, $statements, $callback);
+    }
 }

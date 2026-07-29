@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 - 2026-07-29
+
+- Add `Nitro::replaceMany()` for atomic scoped collection snapshots.
+- Delete stale scoped rows and upsert as many as 9,999 replacements through
+  one bridge call, one native transaction, and a reused prepared statement.
+- Require PAM Native 0.5.13 for heterogeneous native SQLite transactions.
+
 ## 0.1.0 - 2026-07-28
 
 - Add attribute-driven models with typed fields, integer enums, primary keys,

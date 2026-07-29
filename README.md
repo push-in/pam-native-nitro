@@ -18,6 +18,7 @@ native worker and materializing only the records a screen needs.
 - Bounded, indexed, paginated queries.
 - Integer-backed enums for coded domain values.
 - Additive schema evolution without dropping cached rows.
+- Atomic scoped snapshot replacement without stale rows or empty-cache windows.
 - No reflection in hot query paths; schemas are reflected once and cached.
 - No JavaScript, JSI, ORM proxies, or runtime code generation.
 
@@ -34,7 +35,7 @@ Read the [architecture](docs/architecture.md) and
 composer require pushinbr/pam-native-nitro
 ```
 
-PAM Native Nitro 0.1 requires PAM Native 0.5.4 or newer.
+PAM Native Nitro 0.2 requires PAM Native 0.5.13 or newer.
 
 ## Models
 
@@ -119,6 +120,15 @@ Nitro::saveMany($messages, function (): void {
     // Thousands of upserts, one bridge call, one prepared statement,
     // one native transaction.
 });
+
+Nitro::replaceMany(
+    Message::class,
+    $freshMessages,
+    ['chat_id' => $chatId],
+    function (): void {
+        // The old chat snapshot and every new upsert commit atomically.
+    },
+);
 ```
 
 ## Schema evolution
