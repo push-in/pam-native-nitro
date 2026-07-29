@@ -129,7 +129,17 @@ Nitro::replaceMany(
         // The old chat snapshot and every new upsert commit atomically.
     },
 );
+
+$message->delete();
+
+Nitro::deleteWhere(
+    Message::class,
+    ['chat_id' => $chatId, 'pending' => false],
+);
 ```
+
+Model deletion always uses its primary key. `deleteWhere()` requires an
+explicit non-empty scope, so an accidental table-wide delete is rejected.
 
 ## Schema evolution
 

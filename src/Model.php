@@ -39,6 +39,11 @@ abstract class Model
         return Nitro::save($this, $callback);
     }
 
+    final public function delete(?\Closure $callback = null): int
+    {
+        return Nitro::delete($this, $callback);
+    }
+
     /** @return array<string, string|int|float|bool|null> */
     final public function attributes(): array
     {
