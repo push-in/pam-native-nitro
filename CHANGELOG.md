@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 - 2026-07-29
 
 - Infer nullable columns from nullable PHP property types, including enums.
 
