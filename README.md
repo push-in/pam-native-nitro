@@ -6,6 +6,21 @@ PAM Native Nitro is the high-performance local data engine for PAM Native. It ke
 application startup independent from database size by querying lazily on a
 native worker and materializing only the records a screen needs.
 
+## Part of the PAM ecosystem
+
+Nitro is an extension of [PAM Native](https://github.com/push-in/pam-native),
+the native Android and iOS runtime that keeps PHP alive in the application
+process and renders real platform controls without JavaScript or WebViews.
+
+- [PAM Native core](https://github.com/push-in/pam-native) — runtime, renderer,
+  navigation, native modules and tooling required by Nitro.
+- [PAM Native documentation](https://push-in.github.io/pam-docs/native/overview/)
+  — install and understand the native runtime first.
+- [Nitro documentation](https://push-in.github.io/pam-docs/packages/native-nitro/) —
+  models, schemas, queries, observability and offline-first patterns.
+- [PAM platform](https://github.com/push-in/pam) — the persistent PHP server
+  runtime and the wider ecosystem.
+
 > Performance claims in this project are backed by reproducible benchmarks.
 > The engineering target is to outperform JSON cache hydration by at least
 > 10× in representative mobile workloads.
