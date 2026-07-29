@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add primary-key model deletion and explicitly scoped bulk deletion.
+
 ## 0.2.0 - 2026-07-29
 
 - Add `Nitro::replaceMany()` for atomic scoped collection snapshots.

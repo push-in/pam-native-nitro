@@ -71,6 +71,42 @@ final class Nitro
         );
     }
 
+    public static function delete(Model $model, ?Closure $callback = null): int
+    {
+        $schema = ModelSchema::for($model::class);
+        $primary = $schema->primary;
+
+        return self::connection()->execute(
+            'DELETE FROM "'.$schema->table.'" WHERE "'.$primary->name.'" = ?',
+            [$model->{$primary->property}],
+            $callback,
+        );
+    }
+
+    /**
+     * @param class-string<Model> $model
+     * @param array<string, string|int|float|bool|null> $scope
+     */
+    public static function deleteWhere(
+        string $model,
+        array $scope,
+        ?Closure $callback = null,
+    ): int {
+        if ($scope === []) {
+            throw new \InvalidArgumentException(
+                'Nitro deleteWhere requires a non-empty scope.',
+            );
+        }
+        $schema = ModelSchema::for($model);
+        [$clauses, $arguments] = self::scope($schema, $scope);
+
+        return self::connection()->execute(
+            'DELETE FROM "'.$schema->table.'" WHERE '.implode(' AND ', $clauses),
+            $arguments,
+            $callback,
+        );
+    }
+
     /**
      * Persists homogeneous models through one bridge call and one native transaction.
      *
@@ -127,18 +163,7 @@ final class Nitro
             );
         }
         $schema = ModelSchema::for($model);
-        $knownColumns = array_column($schema->columns, 'name');
-        $clauses = [];
-        $scopeArguments = [];
-        foreach ($scope as $column => $value) {
-            if (!in_array($column, $knownColumns, true)) {
-                throw new \InvalidArgumentException(
-                    "Unknown Nitro scope column {$column}.",
-                );
-            }
-            $clauses[] = '"'.$column.'" = ?';
-            $scopeArguments[] = $value;
-        }
+        [$clauses, $scopeArguments] = self::scope($schema, $scope);
         $statements = [[
             'sql' => 'DELETE FROM "'.$schema->table.'" WHERE '.implode(' AND ', $clauses),
             'arguments' => $scopeArguments,
@@ -160,6 +185,28 @@ final class Nitro
         }
 
         return self::connection()->transaction($statements, $callback);
+    }
+
+    /**
+     * @param array<string, string|int|float|bool|null> $scope
+     * @return array{list<string>, list<string|int|float|bool|null>}
+     */
+    private static function scope(ModelSchema $schema, array $scope): array
+    {
+        $knownColumns = array_column($schema->columns, 'name');
+        $clauses = [];
+        $arguments = [];
+        foreach ($scope as $column => $value) {
+            if (!in_array($column, $knownColumns, true)) {
+                throw new \InvalidArgumentException(
+                    "Unknown Nitro scope column {$column}.",
+                );
+            }
+            $clauses[] = '"'.$column.'" = ?';
+            $arguments[] = $value;
+        }
+
+        return [$clauses, $arguments];
     }
 
     private static function connection(): Connection

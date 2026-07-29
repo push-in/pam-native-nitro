@@ -118,6 +118,62 @@ namespace Pam\Nitro\Tests {
             Nitro::replaceMany(Message::class, [], []);
         }
 
+        public function testDeleteUsesTheModelPrimaryKey(): void
+        {
+            Nitro::boot('nitro-test.db');
+            self::$call = null;
+
+            self::message('m-delete', 'Delete me', 5)->delete();
+
+            self::assertNotNull(self::$call);
+            self::assertSame('execute', self::$call['method']);
+            $payload = Wire::decodeMap(self::$call['payload']);
+            self::assertSame('DELETE FROM "messages" WHERE "id" = ?', $payload['sql']);
+            self::assertSame(
+                ['m-delete'],
+                json_decode(
+                    (string) $payload['arguments'],
+                    true,
+                    512,
+                    JSON_THROW_ON_ERROR,
+                ),
+            );
+        }
+
+        public function testDeleteWhereCompilesAnExplicitScope(): void
+        {
+            Nitro::boot('nitro-test.db');
+            self::$call = null;
+
+            Nitro::deleteWhere(
+                Message::class,
+                ['chat_id' => 'c1', 'pending' => false],
+            );
+
+            self::assertNotNull(self::$call);
+            self::assertSame('execute', self::$call['method']);
+            $payload = Wire::decodeMap(self::$call['payload']);
+            self::assertSame(
+                'DELETE FROM "messages" WHERE "chat_id" = ? AND "pending" = ?',
+                $payload['sql'],
+            );
+            self::assertSame(
+                ['c1', false],
+                json_decode(
+                    (string) $payload['arguments'],
+                    true,
+                    512,
+                    JSON_THROW_ON_ERROR,
+                ),
+            );
+        }
+
+        public function testDeleteWhereRejectsAnEmptyScope(): void
+        {
+            $this->expectException(\InvalidArgumentException::class);
+            Nitro::deleteWhere(Message::class, []);
+        }
+
         private static function message(string $id, string $body, int $createdAt): Message
         {
             $message = new Message();
