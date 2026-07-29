@@ -103,6 +103,65 @@ final class Nitro
         );
     }
 
+    /**
+     * Atomically replaces every row inside a scoped collection snapshot.
+     *
+     * @param class-string<Model> $model
+     * @param list<Model> $models
+     * @param array<string, string|int|float|bool|null> $scope
+     */
+    public static function replaceMany(
+        string $model,
+        array $models,
+        array $scope,
+        ?Closure $callback = null,
+    ): int {
+        if ($scope === []) {
+            throw new \InvalidArgumentException(
+                'Nitro replaceMany requires a non-empty scope.',
+            );
+        }
+        if (count($models) > 9_999) {
+            throw new \InvalidArgumentException(
+                'Nitro replaceMany accepts at most 9999 models.',
+            );
+        }
+        $schema = ModelSchema::for($model);
+        $knownColumns = array_column($schema->columns, 'name');
+        $clauses = [];
+        $scopeArguments = [];
+        foreach ($scope as $column => $value) {
+            if (!in_array($column, $knownColumns, true)) {
+                throw new \InvalidArgumentException(
+                    "Unknown Nitro scope column {$column}.",
+                );
+            }
+            $clauses[] = '"'.$column.'" = ?';
+            $scopeArguments[] = $value;
+        }
+        $statements = [[
+            'sql' => 'DELETE FROM "'.$schema->table.'" WHERE '.implode(' AND ', $clauses),
+            'arguments' => $scopeArguments,
+        ]];
+        if ($models !== []) {
+            $argumentSets = [];
+            foreach ($models as $item) {
+                if ($item::class !== $model) {
+                    throw new \InvalidArgumentException(
+                        'Nitro replaceMany requires models of the declared class.',
+                    );
+                }
+                $argumentSets[] = array_values($item->attributes());
+            }
+            $statements[] = [
+                'sql' => self::upsertSql($schema),
+                'argumentSets' => $argumentSets,
+            ];
+        }
+
+        return self::connection()->transaction($statements, $callback);
+    }
+
     private static function connection(): Connection
     {
         return self::$connection ?? throw new LogicException(
