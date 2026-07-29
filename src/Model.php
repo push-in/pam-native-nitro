@@ -57,6 +57,9 @@ abstract class Model
         $model = new static();
         foreach (ModelSchema::for(static::class)->columns as $column) {
             $value = $row[$column->name] ?? null;
+            if ($value === null && !$column->nullable) {
+                $value = $column->default;
+            }
             if ($column->enum !== null && $value !== null) {
                 $value = $column->enum::from(
                     is_int($value) ? $value : (int) $value,

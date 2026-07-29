@@ -36,6 +36,13 @@ PAM Native opens application-private databases with:
 Database I/O runs outside the UI renderer. A completed callback schedules only
 the state change the application requested.
 
+## Additive migrations
+
+Preparation reads SQLite table metadata and adds missing model columns in
+declaration order. Non-nullable fields carry their reflected PHP default into
+the `ALTER TABLE`, so existing rows stay valid and hydrate without a cache
+reset. Index creation runs only after reconciliation completes.
+
 ## Safety limits
 
 - at most 10,000 argument sets per bulk write;

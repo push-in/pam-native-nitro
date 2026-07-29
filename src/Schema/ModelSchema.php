@@ -69,6 +69,13 @@ final class ModelSchema
             $name = $definition->name ?? self::snake($property->getName());
             self::assertIdentifier($name);
             [$type, $enum] = self::columnType($property);
+            $default = $property->hasDefaultValue()
+                ? $property->getDefaultValue()
+                : self::migrationDefault($type, $enum, $definition->nullable);
+            if ($default instanceof BackedEnum) {
+                $default = $default->value;
+            }
+            $default = self::scalarDefault($default, $property->getName());
             $column = new Column(
                 property: $property->getName(),
                 name: $name,
@@ -79,6 +86,7 @@ final class ModelSchema
                 enum: $enum,
                 boolean: $property->getType() instanceof ReflectionNamedType
                     && $property->getType()->getName() === 'bool',
+                default: $default,
             );
             $columns[] = $column;
             if ($isPrimary) {
@@ -94,6 +102,50 @@ final class ModelSchema
         }
 
         return new self($model, $table, $columns, $primary, $relations);
+    }
+
+    /** @param class-string<BackedEnum>|null $enum */
+    private static function migrationDefault(
+        ColumnType $type,
+        ?string $enum,
+        bool $nullable,
+    ): string|int|float|null {
+        if ($nullable) {
+            return null;
+        }
+        if ($enum !== null) {
+            $first = $enum::cases()[0] ?? null;
+            if ($first === null) {
+                throw new InvalidArgumentException("{$enum} requires at least one case.");
+            }
+
+            return $first->value;
+        }
+
+        return match ($type) {
+            ColumnType::Integer => 0,
+            ColumnType::Real => 0.0,
+            ColumnType::Text, ColumnType::Blob => '',
+        };
+    }
+
+    private static function scalarDefault(
+        mixed $value,
+        string $property,
+    ): string|int|float|bool|null {
+        if (
+            $value === null
+            || is_string($value)
+            || is_int($value)
+            || is_float($value)
+            || is_bool($value)
+        ) {
+            return $value;
+        }
+
+        throw new InvalidArgumentException(
+            "{$property} requires a scalar field default.",
+        );
     }
 
     /** @return array{ColumnType, class-string<BackedEnum>|null} */

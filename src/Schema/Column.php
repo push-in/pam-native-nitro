@@ -15,6 +15,7 @@ final readonly class Column
         public bool $nullable,
         public ?string $enum,
         public bool $boolean,
+        public string|int|float|bool|null $default,
     ) {
     }
 }

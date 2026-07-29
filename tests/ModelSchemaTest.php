@@ -39,6 +39,11 @@ final class ModelSchemaTest extends TestCase
         self::assertSame('c1', $message->chatId);
         self::assertSame(2, $message->attributes()['type']);
         self::assertTrue($message->pending);
+        self::assertSame('Sem prévia', $message->preview);
+        self::assertSame(
+            'Sem prévia',
+            ModelSchema::for(Message::class)->columns[6]->default,
+        );
     }
 
     public function testInitializesChildrenRelationsOnceWithTheModel(): void

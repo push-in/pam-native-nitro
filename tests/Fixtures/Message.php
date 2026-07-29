@@ -29,6 +29,9 @@ final class Message extends Model
     #[Field]
     public bool $pending;
 
+    #[Field]
+    public string $preview = 'Sem prévia';
+
     public static function table(): string
     {
         return 'messages';

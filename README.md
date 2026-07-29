@@ -17,6 +17,7 @@ native worker and materializing only the records a screen needs.
 - Lazy models: no full-database hydration.
 - Bounded, indexed, paginated queries.
 - Integer-backed enums for coded domain values.
+- Additive schema evolution without dropping cached rows.
 - No reflection in hot query paths; schemas are reflected once and cached.
 - No JavaScript, JSI, ORM proxies, or runtime code generation.
 
@@ -120,8 +121,24 @@ Nitro::saveMany($messages, function (): void {
 });
 ```
 
+## Schema evolution
+
+`Nitro::prepare()` reconciles newly declared fields with an existing table.
+Missing columns are added sequentially on the native SQLite worker, preserving
+all cached rows. Give a new non-nullable property a domain-safe default:
+
+```php
+#[Field]
+public string $preview = '';
+```
+
+Older rows hydrate with that default immediately. Nullable fields migrate to
+`NULL`; integer-backed enums use the first sequential case when no explicit
+property default exists. Destructive renames and type changes remain explicit
+application migrations.
+
 ## Status
 
 PAM Native Nitro is under active development. The initial API is intentionally small
-while the binary bridge, batch writes, observation, migrations, relations, and
+while the binary bridge, batch writes, observation, destructive migrations, relations, and
 benchmarks are hardened.

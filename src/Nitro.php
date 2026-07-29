@@ -33,34 +33,13 @@ final class Nitro
     {
         $schema = ModelSchema::for($model);
         $columns = array_map(
-            static function ($column): string {
-                $sql = '"'.$column->name.'" '.match ($column->type) {
-                    ColumnType::Integer => 'INTEGER',
-                    ColumnType::Real => 'REAL',
-                    ColumnType::Text => 'TEXT',
-                    ColumnType::Blob => 'BLOB',
-                };
-                if ($column->primary) {
-                    $sql .= ' PRIMARY KEY';
-                }
-                if (!$column->nullable) {
-                    $sql .= ' NOT NULL';
-                }
-
-                return $sql;
-            },
+            self::columnDefinition(...),
             $schema->columns,
         );
 
         return self::connection()->execute(
             'CREATE TABLE IF NOT EXISTS "'.$schema->table.'" ('.implode(', ', $columns).')',
-            callback: static function () use ($schema, $callback): void {
-                $indexes = array_values(array_filter(
-                    $schema->columns,
-                    static fn ($column): bool => $column->indexed && !$column->primary,
-                ));
-                self::createIndexes($schema->table, $indexes, 0, $callback);
-            },
+            callback: static fn () => self::reconcileColumns($schema, $callback),
         );
     }
 
@@ -168,6 +147,94 @@ final class Nitro
             .implode('", "', $columns).'") VALUES ('
             .implode(', ', array_fill(0, count($columns), '?')).') '
             .'ON CONFLICT("'.$schema->primary->name.'") '.$conflict;
+    }
+
+    private static function columnDefinition(
+        \Pam\Nitro\Schema\Column $column,
+        bool $alter = false,
+    ): string {
+        $sql = '"'.$column->name.'" '.match ($column->type) {
+            ColumnType::Integer => 'INTEGER',
+            ColumnType::Real => 'REAL',
+            ColumnType::Text => 'TEXT',
+            ColumnType::Blob => 'BLOB',
+        };
+        if ($column->primary) {
+            $sql .= ' PRIMARY KEY';
+        }
+        if (!$column->nullable) {
+            $sql .= ' NOT NULL';
+            if ($alter) {
+                $sql .= ' DEFAULT '.self::sqlLiteral($column->default);
+            }
+        }
+
+        return $sql;
+    }
+
+    private static function sqlLiteral(string|int|float|bool|null $value): string
+    {
+        return match (true) {
+            $value === null => 'NULL',
+            is_bool($value) => $value ? '1' : '0',
+            is_int($value), is_float($value) => (string) $value,
+            default => "'".str_replace("'", "''", $value)."'",
+        };
+    }
+
+    private static function reconcileColumns(
+        ModelSchema $schema,
+        ?Closure $callback,
+    ): void {
+        self::connection()->query(
+            'PRAGMA table_info("'.$schema->table.'")',
+            [],
+            static function (array $rows) use ($schema, $callback): void {
+                $existing = [];
+                foreach ($rows as $row) {
+                    if (is_string($row['name'] ?? null)) {
+                        $existing[$row['name']] = true;
+                    }
+                }
+                $missing = array_values(array_filter(
+                    $schema->columns,
+                    static fn ($column): bool =>
+                        !$column->primary && !isset($existing[$column->name]),
+                ));
+                self::addColumns($schema, $missing, 0, $callback);
+            },
+        );
+    }
+
+    /** @param list<\Pam\Nitro\Schema\Column> $columns */
+    private static function addColumns(
+        ModelSchema $schema,
+        array $columns,
+        int $offset,
+        ?Closure $callback,
+    ): void {
+        $column = $columns[$offset] ?? null;
+        if ($column === null) {
+            $indexes = array_values(array_filter(
+                $schema->columns,
+                static fn ($candidate): bool =>
+                    $candidate->indexed && !$candidate->primary,
+            ));
+            self::createIndexes($schema->table, $indexes, 0, $callback);
+
+            return;
+        }
+
+        self::connection()->execute(
+            'ALTER TABLE "'.$schema->table.'" ADD COLUMN '
+                .self::columnDefinition($column, true),
+            callback: static fn () => self::addColumns(
+                $schema,
+                $columns,
+                $offset + 1,
+                $callback,
+            ),
+        );
     }
 
     /** @param list<\Pam\Nitro\Schema\Column> $indexes */

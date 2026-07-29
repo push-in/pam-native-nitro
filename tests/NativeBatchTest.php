@@ -56,8 +56,8 @@ namespace Pam\Nitro\Tests {
                 JSON_THROW_ON_ERROR,
             );
             self::assertSame([
-                ['m1', 'c1', 'Nitro', 1, 1, false],
-                ['m2', 'c1', 'Fast', 1, 2, false],
+                ['m1', 'c1', 'Nitro', 1, 1, false, 'Sem prévia'],
+                ['m2', 'c1', 'Fast', 1, 2, false, 'Sem prévia'],
             ], $rows);
             self::assertStringContainsString('ON CONFLICT', (string) $payload['sql']);
         }
