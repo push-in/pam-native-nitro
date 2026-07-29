@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-07-29
 
 - Add primary-key model deletion and explicitly scoped bulk deletion.
 
