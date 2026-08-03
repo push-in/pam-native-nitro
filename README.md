@@ -189,6 +189,12 @@ Conflict resolution is explicit and deterministic through integer-backed
 `ConflictPolicy` cases: server wins, client wins, last write wins (server wins
 ties), or an application-provided manual resolver.
 
+Incoming server pages use `DeltaApplier`: row upserts, tombstone deletions and
+the new opaque cursor commit through one native SQLite transaction. A crash can
+therefore never advance the cursor without its data, or apply data without the
+matching cursor. Empty pages still advance the cursor and deletion identifiers
+are parameterized in bounded chunks.
+
 Model deletion always uses its primary key. `deleteWhere()` requires an
 explicit non-empty scope, so an accidental table-wide delete is rejected.
 
