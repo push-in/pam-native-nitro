@@ -209,7 +209,7 @@ final class Nitro
         return [$clauses, $arguments];
     }
 
-    private static function connection(): Connection
+    public static function connection(): Connection
     {
         return self::$connection ?? throw new LogicException(
             'Call Nitro::boot() before querying models.',

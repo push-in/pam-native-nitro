@@ -34,6 +34,8 @@ process and renders real platform controls without JavaScript or WebViews.
 - Integer-backed enums for coded domain values.
 - Additive schema evolution without dropping cached rows.
 - Atomic scoped snapshot replacement without stale rows or empty-cache windows.
+- Durable idempotent mutation outbox with bounded exponential retry.
+- Integer-backed mutation states, operations and conflict policies.
 - No reflection in hot query paths; schemas are reflected once and cached.
 - No JavaScript, JSI, ORM proxies, or runtime code generation.
 
@@ -152,6 +154,40 @@ Nitro::deleteWhere(
     ['chat_id' => $chatId, 'pending' => false],
 );
 ```
+
+## Durable offline mutations
+
+Queue a local mutation before starting network work. The idempotency key is
+stored as the outbox primary key, so replaying the same user action updates one
+durable entry instead of creating duplicate server writes:
+
+```php
+use Pam\Nitro\Sync\MutationOperation;
+use Pam\Nitro\Sync\SyncQueue;
+
+enum SyncEntityKind: int
+{
+    case Message = 1;
+}
+
+SyncQueue::enqueue(
+    SyncEntityKind::Message,
+    $message->id,
+    MutationOperation::Upsert,
+    $message->attributes(),
+    idempotencyKey: $clientMutationId,
+);
+```
+
+Workers request only due pending/retry entries, mark an attempt in flight, and
+either acknowledge it or schedule a bounded exponential retry. Acknowledged
+and terminally failed rows stay in the log until application retention policy
+removes them, preserving diagnostics and exactly-once intent across process
+death.
+
+Conflict resolution is explicit and deterministic through integer-backed
+`ConflictPolicy` cases: server wins, client wins, last write wins (server wins
+ties), or an application-provided manual resolver.
 
 Model deletion always uses its primary key. `deleteWhere()` requires an
 explicit non-empty scope, so an accidental table-wide delete is rejected.

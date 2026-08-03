@@ -49,3 +49,18 @@ reset. Index creation runs only after reconciliation completes.
 - at most 1,000 rows and 256 columns per bridged query;
 - bound values only; identifiers come exclusively from reflected model schema;
 - integer-backed enums for every coded domain value.
+
+## Offline mutation path
+
+`SyncQueue` persists every mutation before transport begins. Its idempotency
+key is the primary key, payloads are bounded to 1 MiB, entity kinds must be
+application-defined integer-backed enums, and state/operation codes are
+sequential integer-backed framework enums. Due work is ordered by creation
+time and limited to 1,000 entries per pull.
+
+Failed attempts use bounded exponential backoff. Reaching the configured
+attempt ceiling records a terminal failure instead of retrying forever.
+Acknowledgements remain in the mutation log for application-defined retention
+and diagnostics. Conflict resolution is side-effect-free and deterministic;
+last-write-wins resolves timestamp ties in favor of the server so multiple
+clients converge.
