@@ -52,7 +52,8 @@ Read the [architecture](docs/architecture.md) and
 composer require pushinbr/pam-native-nitro
 ```
 
-PAM Native Nitro 0.2 requires PAM Native 0.5.13 or newer.
+PAM Native Nitro 0.3.3 and newer require PAM Native 0.6.2 or newer within the
+0.6 release line.
 
 ## Models
 

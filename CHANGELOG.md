@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.3 - 2026-08-03
 
 - Added the durable offline mutation outbox with idempotency keys, bounded
   payloads, due-work pagination, acknowledgements, exponential retries and
@@ -9,6 +9,7 @@
   enums plus deterministic conflict resolution.
 - Added atomic remote delta application with bounded tombstone chunks and
   scoped opaque cursor persistence.
+- Require and certify PAM Native 0.6.2.
 
 ## 0.3.1 - 2026-07-29
 
