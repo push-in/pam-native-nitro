@@ -64,3 +64,11 @@ Acknowledgements remain in the mutation log for application-defined retention
 and diagnostics. Conflict resolution is side-effect-free and deterministic;
 last-write-wins resolves timestamp ties in favor of the server so multiple
 clients converge.
+
+## Delta application
+
+`DeltaApplier` commits server upserts, tombstone IDs and an opaque scoped cursor
+inside one native SQLite transaction. Deletes are parameterized in chunks of
+500 and a page is bounded to 10,000 total changes. Cursor advancement is the
+last statement, including for empty pages, so restart recovery never observes
+a partially applied remote page.

@@ -7,6 +7,8 @@
   terminal failure state.
 - Added sequential integer-backed mutation operation/state and conflict policy
   enums plus deterministic conflict resolution.
+- Added atomic remote delta application with bounded tombstone chunks and
+  scoped opaque cursor persistence.
 
 ## 0.3.1 - 2026-07-29
 

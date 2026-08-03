@@ -10,6 +10,7 @@ use Pam\Native\ModuleResultStatus;
 use Pam\Nitro\Nitro;
 use Pam\Nitro\Sync\ConflictPolicy;
 use Pam\Nitro\Sync\ConflictResolver;
+use Pam\Nitro\Sync\DeltaApplier;
 use Pam\Nitro\Sync\MutationOperation;
 use Pam\Nitro\Sync\MutationState;
 use Pam\Nitro\Sync\OutboxMutation;
@@ -17,6 +18,7 @@ use Pam\Nitro\Sync\RetryPolicy;
 use Pam\Nitro\Sync\SyncQueue;
 use Pam\Nitro\Tests\Fixtures\SyncEntityKind;
 use Pam\Nitro\Tests\Fixtures\InvalidSyncEntityKind;
+use Pam\Nitro\Tests\Fixtures\Message;
 use PHPUnit\Framework\TestCase;
 
 final class SyncQueueTest extends TestCase
@@ -220,6 +222,49 @@ final class SyncQueueTest extends TestCase
         ConflictResolver::resolve([], [], ConflictPolicy::Manual, 1, 1);
     }
 
+    public function testAppliesDeletesUpsertsAndCursorInOneTransaction(): void
+    {
+        $message = new Message();
+        $message->id = 'message-new';
+        $message->chatId = 'chat-1';
+        $message->body = 'delta';
+        $message->type = \Pam\Nitro\Tests\Fixtures\MessageType::Text;
+        $message->createdAt = 9;
+        $message->pending = false;
+
+        DeltaApplier::apply(
+            'messages:chat-1',
+            Message::class,
+            [$message],
+            ['message-old'],
+            'cursor-2',
+            4_000,
+        );
+
+        self::assertNotNull(NativeBatchTest::$call);
+        self::assertSame('transaction', NativeBatchTest::$call['method']);
+        $payload = Wire::decodeMap(NativeBatchTest::$call['payload']);
+        $statements = self::statements($payload['arguments']);
+        self::assertCount(3, $statements);
+        self::assertStringContainsString('DELETE FROM "messages"', $statements[0]['sql']);
+        self::assertSame(['message-old'], $statements[0]['arguments']);
+        self::assertStringContainsString('ON CONFLICT("id")', $statements[1]['sql']);
+        self::assertCount(1, $statements[1]['argumentSets']);
+        self::assertStringContainsString('nitro_sync_cursors', $statements[2]['sql']);
+        self::assertSame(['messages:chat-1', 'cursor-2', 4_000], $statements[2]['arguments']);
+    }
+
+    public function testDeltaAlwaysAdvancesCursorEvenWithoutRowChanges(): void
+    {
+        DeltaApplier::apply('messages:chat-1', Message::class, [], [], 'cursor-3', 5_000);
+
+        self::assertNotNull(NativeBatchTest::$call);
+        $payload = Wire::decodeMap(NativeBatchTest::$call['payload']);
+        $statements = self::statements($payload['arguments']);
+        self::assertCount(1, $statements);
+        self::assertSame(['messages:chat-1', 'cursor-3', 5_000], $statements[0]['arguments']);
+    }
+
     /** @return list<string|int|float|bool|null> */
     private static function arguments(): array
     {
@@ -248,6 +293,69 @@ final class SyncQueueTest extends TestCase
         }
 
         return $arguments;
+    }
+
+    /**
+     * @return list<array{
+     *     sql: string,
+     *     arguments: list<string|int|float|bool|null>,
+     *     argumentSets: list<list<string|int|float|bool|null>>
+     * }>
+     */
+    private static function statements(mixed $encoded): array
+    {
+        if (!is_string($encoded)) {
+            throw new \LogicException('Native statements must be JSON.');
+        }
+        $decoded = json_decode($encoded, true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($decoded) || !array_is_list($decoded)) {
+            throw new \LogicException('Native statements must decode to a list.');
+        }
+
+        $statements = [];
+        foreach ($decoded as $statement) {
+            if (!is_array($statement) || !isset($statement['sql']) || !is_string($statement['sql'])) {
+                throw new \LogicException('Every native statement must contain SQL.');
+            }
+            $normalized = [
+                'sql' => $statement['sql'],
+                'arguments' => [],
+                'argumentSets' => [],
+            ];
+            if (array_key_exists('arguments', $statement)) {
+                $normalized['arguments'] = self::scalars($statement['arguments']);
+            }
+            if (array_key_exists('argumentSets', $statement)) {
+                if (!is_array($statement['argumentSets']) || !array_is_list($statement['argumentSets'])) {
+                    throw new \LogicException('Native argument sets must be a list.');
+                }
+                $normalized['argumentSets'] = array_map(self::scalars(...), $statement['argumentSets']);
+            }
+            $statements[] = $normalized;
+        }
+
+        return $statements;
+    }
+
+    /** @return list<string|int|float|bool|null> */
+    private static function scalars(mixed $values): array
+    {
+        if (!is_array($values) || !array_is_list($values)) {
+            throw new \LogicException('Native arguments must be a list.');
+        }
+        $normalized = [];
+        foreach ($values as $value) {
+            if (!is_string($value)
+                && !is_int($value)
+                && !is_float($value)
+                && !is_bool($value)
+                && $value !== null) {
+                throw new \LogicException('Native arguments must contain JSON scalars.');
+            }
+            $normalized[] = $value;
+        }
+
+        return $normalized;
     }
 
     /** @return array<string, string|int|null> */
