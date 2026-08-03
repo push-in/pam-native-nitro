@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to publish and verify
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,6 +17,8 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
 
@@ -29,15 +37,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
-            gh release create "${GITHUB_REF_NAME}" \
+          gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || \
+            gh release create "${RELEASE_TAG}" \
               --verify-tag \
               --generate-notes \
-              --title "PAM Native Nitro ${GITHUB_REF_NAME}"
+              --title "PAM Native Nitro ${RELEASE_TAG}"
+
+      - name: Publish on Packagist
+        env:
+          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
+          PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
+        run: |
+          test -n "${PACKAGIST_USERNAME}"
+          test -n "${PACKAGIST_TOKEN}"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+            --retry 5 --retry-delay 2 --retry-all-errors \
+            --request POST \
+            --header 'Content-Type: application/json' \
+            --header "Authorization: Bearer ${PACKAGIST_USERNAME}:${PACKAGIST_TOKEN}" \
+            --header 'User-Agent: push-in/pam-native-nitro release automation' \
+            --data '{"repository":"https://github.com/push-in/pam-native-nitro"}' \
+            https://packagist.org/api/update-package
 
       - name: Verify Packagist publication
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           for attempt in $(seq 1 12); do
             if curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
