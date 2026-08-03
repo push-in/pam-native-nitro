@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added the durable offline mutation outbox with idempotency keys, bounded
+  payloads, due-work pagination, acknowledgements, exponential retries and
+  terminal failure state.
+- Added sequential integer-backed mutation operation/state and conflict policy
+  enums plus deterministic conflict resolution.
+
 ## 0.3.1 - 2026-07-29
 
 - Infer nullable columns from nullable PHP property types, including enums.
