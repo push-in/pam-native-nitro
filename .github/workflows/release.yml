@@ -35,27 +35,28 @@ jobs:
               --generate-notes \
               --title "PAM Native Nitro ${GITHUB_REF_NAME}"
 
-      - name: Publish on Packagist
+      - name: Verify Packagist publication
         env:
-          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
-          PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          test -n "${PACKAGIST_USERNAME}"
-          test -n "${PACKAGIST_TOKEN}"
-          payload='{"repository":{"url":"https://github.com/push-in/pam-native-nitro"}}'
-          username=$(php -r 'echo rawurlencode((string) getenv("PACKAGIST_USERNAME"));')
-          token=$(php -r 'echo rawurlencode((string) getenv("PACKAGIST_TOKEN"));')
-          endpoint="https://packagist.org/api"
-          request() {
-            curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
-              --retry 5 --retry-delay 2 --retry-all-errors \
-              --request POST --header 'Content-Type: application/json' \
-              --data "${payload}" "$1"
-          }
-          update_url="${endpoint}/update-package?username=${username}&apiToken=${token}"
-          create_url="${endpoint}/create-package?username=${username}&apiToken=${token}"
-          if ! request "${update_url}"; then
-            if ! request "${create_url}"; then
-              request "${update_url}"
+          for attempt in $(seq 1 12); do
+            if curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+              --retry 3 --retry-delay 2 --retry-all-errors \
+              --output "${RUNNER_TEMP}/packagist.json" \
+              https://repo.packagist.org/p2/pushinbr/pam-native-nitro.json \
+              && php -r '
+                $metadata = json_decode(file_get_contents($argv[1]), true, flags: JSON_THROW_ON_ERROR);
+                $versions = $metadata["packages"]["pushinbr/pam-native-nitro"] ?? [];
+                foreach ($versions as $version) {
+                    if (($version["version"] ?? null) === getenv("RELEASE_TAG")) {
+                        exit(0);
+                    }
+                }
+                exit(1);
+              ' "${RUNNER_TEMP}/packagist.json"; then
+              exit 0
             fi
-          fi
+            sleep 10
+          done
+          echo "Packagist did not expose ${RELEASE_TAG} within the publication window" >&2
+          exit 1
