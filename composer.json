@@ -2,7 +2,7 @@
     "name": "pushinbr/pam-native-nitro",
     "description": "Ultra-fast offline-first data engine for PAM Native.",
     "type": "library",
-    "license": "BUSL-1.1",
+    "license": "Apache-2.0",
     "keywords": [
         "pam",
         "pam-native",
