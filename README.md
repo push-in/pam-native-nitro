@@ -49,8 +49,14 @@ Read the [architecture](docs/architecture.md) and
 ## Installation
 
 ```bash
-composer require pushinbr/pam-native-nitro
+pam add nitro
+pam doctor
 ```
+
+`pam add nitro` performs compatibility preflight, updates the standard Composer
+manifest and lockfile, refreshes native integration, and validates the project
+through the PAM workflow. Use direct Composer commands only for advanced package
+interoperability.
 
 PAM Native Nitro 0.3.3 and newer require PAM Native 0.6.2 or newer within the
 0.6 release line.
