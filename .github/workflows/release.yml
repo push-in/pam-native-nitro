@@ -15,7 +15,12 @@ permissions:
   contents: write
 
 jobs:
+  ecosystem-compatibility:
+    name: Certify the complete PAM Native ecosystem
+    uses: push-in/pam/.github/workflows/ecosystem-compatibility.yml@main
+
   publish:
+    needs: ecosystem-compatibility
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
