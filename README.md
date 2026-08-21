@@ -6,6 +6,21 @@ PAM Native Nitro is the high-performance local data engine for PAM Native. It ke
 application startup independent from database size by querying lazily on a
 native worker and materializing only the records a screen needs.
 
+## Start here
+
+Install the PAM Runtime and create a PAM Native project before adding Nitro:
+
+```bash
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
+    --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSL \
+    https://github.com/push-in/pam/releases/latest/download/install.sh | sh
+
+pam init my-app --template native
+cd my-app
+pam composer require pushinbr/pam-native-nitro
+pam doctor --fix
+```
+
 ## Part of the PAM ecosystem
 
 Nitro is an extension of [PAM Native](https://github.com/push-in/pam-native),
@@ -45,18 +60,6 @@ persistent PHP runtime with fewer transport layers.
 
 Read the [architecture](docs/architecture.md) and
 [benchmark protocol](docs/benchmarks.md) before evaluating performance claims.
-
-## Installation
-
-```bash
-pam add nitro
-pam doctor
-```
-
-`pam add nitro` performs compatibility preflight, updates the standard Composer
-manifest and lockfile, refreshes native integration, and validates the project
-through the PAM workflow. Use direct Composer commands only for advanced package
-interoperability.
 
 PAM Native Nitro 0.3.3 and newer require PAM Native 0.6.2 or newer within the
 0.6 release line.
