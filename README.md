@@ -1,25 +1,58 @@
+<!-- pam:product-page:start -->
+<div align="center">
+
 # PAM Native Nitro
+
+**An offline-first data engine for instant native applications.**
+
+Query indexed local data, observe incremental changes, and keep large datasets responsive through a typed storage boundary.
+
+[![Latest version](https://img.shields.io/packagist/v/pushinbr/pam-native-nitro?style=flat-square&label=stable)](https://packagist.org/packages/pushinbr/pam-native-nitro)
+[![CI](https://img.shields.io/github/actions/workflow/status/push-in/pam-native-nitro/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/push-in/pam-native-nitro/actions)
+![PHP](https://img.shields.io/badge/PHP-8.5-777BB4?style=flat-square&logo=php&logoColor=white)
+![Android](https://img.shields.io/badge/Android-API%2026%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
+![iOS](https://img.shields.io/badge/iOS-15%2B-000000?style=flat-square&logo=apple&logoColor=white)
+
+**[Documentation](https://push-in.github.io/pam-docs/native/overview/) · [Quick start](#quick-start) · [What you can build](#what-you-can-build) · [PAM ecosystem](https://push-in.github.io/pam-docs/ecosystem/) · [Issues](https://github.com/push-in/pam-native-nitro/issues)**
+
+</div>
+
+---
+
+## Why PAM Native Nitro
+
+Query indexed local data, observe incremental changes, and keep large datasets responsive through a typed storage boundary. The public API is strictly typed for PHP 8.5; expensive or frame-sensitive work stays in Rust or the platform SDK instead of crossing the application boundary every frame.
+
+| | |
+| --- | --- |
+| **Best for** | A focused capability you can add to any PAM Native application |
+| **Native path** | Native indexed storage · Incremental observers |
+| **Application model** | Composer package + generated native integration |
+| **Design rule** | Independent module; no feed, vertical, or application template bundled |
+
+## What you can build
+
+- Offline catalogs and field applications
+- Large local timelines and searchable datasets
+- Reactive caches backed by durable native storage
+
+## Quick start
+
+Already have a PAM Native project? Add only this capability:
+
+```bash
+pam composer require pushinbr/pam-native-nitro
+pam doctor --fix
+```
+
+New to PAM? Follow the **[five-minute PAM Native setup](https://push-in.github.io/pam-docs/native/overview/)** once, then return here. Your application stays a normal Composer project with a committed lockfile.
+<!-- pam:product-page:end -->
 
 **Offline-first data at native speed.**
 
 PAM Native Nitro is the high-performance local data engine for PAM Native. It keeps
 application startup independent from database size by querying lazily on a
 native worker and materializing only the records a screen needs.
-
-## Start here
-
-Install the PAM Runtime and create a PAM Native project before adding Nitro:
-
-```bash
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 \
-    --connect-timeout 15 --max-time 60 --max-filesize 1048576 -fsSL \
-    https://github.com/push-in/pam/releases/latest/download/install.sh | sh
-
-pam init my-app --template native
-cd my-app
-pam composer require pushinbr/pam-native-nitro
-pam doctor --fix
-```
 
 ## Part of the PAM ecosystem
 
