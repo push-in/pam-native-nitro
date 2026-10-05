@@ -33,15 +33,56 @@ PAM Native opens application-private databases with:
 - a 5-second busy timeout;
 - memory-backed temporary storage.
 
-Database I/O runs outside the UI renderer. A completed callback schedules only
-the state change the application requested.
+Database I/O runs outside the UI renderer: Android uses a dedicated
+single-thread executor and iOS a serial dispatch queue, so statements execute
+in submission order without blocking the main thread. Android additionally
+reuses compiled statements through `SQLiteDatabase`'s per-connection cache.
+Every query result, however many rows, arrives as one module result. A
+completed callback schedules only the state change the application requested.
 
-## Additive migrations
+## Boot: fingerprint-gated schema reconciliation
 
-Preparation reads SQLite table metadata and adds missing model columns in
-declaration order. Non-nullable fields carry their reflected PHP default into
-the `ALTER TABLE`, so existing rows stay valid and hydrate without a cache
-reset. Index creation runs only after reconciliation completes.
+Every model table has a fingerprint (xxh128 of its `CREATE TABLE`, additive
+`ALTER TABLE` definitions, indexes and the reconciler version) stored in the
+`nitro_meta` table under `schema:<table>`.
+
+`Nitro::prepare()` issues ONE native query that returns only the tables whose
+stored fingerprint differs, together with their current columns. The query
+reads `sqlite_master`, which pins it to the current schema cookie so pooled
+read connections never answer with stale column metadata.
+
+| Situation | Native calls per `prepare()` |
+| --- | --- |
+| Already verified in this process | 0 |
+| Unchanged schema (normal boot) | 1 |
+| Changed tables | 2 (query + one DDL transaction) |
+| Fresh install or upgrade from Nitro 0.4 | 3 (metadata probe, full inspection, one DDL transaction) |
+
+Every `CREATE TABLE`, missing-column `ALTER TABLE ... DEFAULT`, `CREATE INDEX`
+and fingerprint write is applied in one atomic native transaction, so a
+failed migration leaves the previous schema and fingerprints intact.
+Non-nullable fields carry their reflected PHP default into the `ALTER TABLE`,
+so existing rows stay valid and hydrate without a cache reset.
+
+Nitro 0.4 issued `CREATE TABLE`, `PRAGMA table_info` and one call per index
+or missing column for each model: 48 sequential round-trips for a nine-model
+application on every boot.
+
+## Batched writes and reads
+
+`Nitro::batch()` collects saves, deletes, scoped deletes, snapshot
+replacements and raw statements into one native transaction call.
+Consecutive statements with identical SQL are coalesced into one prepared
+statement executed per argument set.
+
+`Nitro::fetch()` compiles several bounded model queries into one
+`UNION ALL` statement whose rows return as one module result; Nitro splits
+them back per query and preserves each query's order. The combined row budget
+is the bridge limit of 1,000 rows.
+
+Upserts use `INSERT OR REPLACE` with every model column. That is equivalent to
+a primary-key UPSERT for Nitro models and works on SQLite 3.18 (Android 8),
+whereas `ON CONFLICT DO UPDATE` requires SQLite 3.24 (Android 11).
 
 ## Safety limits
 

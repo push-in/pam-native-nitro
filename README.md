@@ -76,7 +76,9 @@ process and renders real platform controls without JavaScript or WebViews.
 ## Design
 
 - Native SQLite on Android and iOS.
-- WAL and prepared-statement optimizations in the PAM runtime.
+- WAL, `synchronous=NORMAL` and prepared-statement reuse in the PAM runtime.
+- One native round-trip per boot to verify the schema fingerprint.
+- `Nitro::batch()` and `Nitro::fetch()` for one-call writes and reads.
 - Lazy models: no full-database hydration.
 - Bounded, indexed, paginated queries.
 - Integer-backed enums for coded domain values.
@@ -94,8 +96,8 @@ persistent PHP runtime with fewer transport layers.
 Read the [architecture](docs/architecture.md) and
 [benchmark protocol](docs/benchmarks.md) before evaluating performance claims.
 
-PAM Native Nitro 0.3.3 and newer require PAM Native 0.6.2 or newer within the
-0.6 release line.
+PAM Native Nitro 0.5 supports PAM Native 0.8 through 1.x on PHP 8.5 and
+Android 8 (API 26) or newer.
 
 ## Models
 
@@ -163,6 +165,7 @@ $chat->messages->get(function (array $messages): void {
 ## Use
 
 ```php
+use Pam\Nitro\Batch;
 use Pam\Nitro\Nitro;
 
 Nitro::boot('zechat.db');
@@ -174,6 +177,24 @@ Nitro::prepare([Message::class], function () use ($chatId): void {
         ->get(function (array $messages): void {
             $this->messages = array_reverse($messages);
         });
+});
+
+// Many heterogeneous writes: one native call, one transaction.
+Nitro::batch(function (Batch $batch) use ($chat, $messages, $draft): void {
+    $batch->save($chat)
+        ->saveMany($messages)
+        ->delete($draft)
+        ->execute('UPDATE "chats" SET "unread" = 0 WHERE "id" = ?', [$chat->id]);
+}, function (): void {
+    // Committed atomically.
+});
+
+// Several screens' worth of data: one native call, one result.
+Nitro::fetch([
+    'chats' => Chat::query()->limit(50),
+    'messages' => Message::query()->where('chat_id', $chatId)->latest()->limit(30),
+], function (array $results): void {
+    [$this->chats, $this->messages] = [$results['chats'], $results['messages']];
 });
 
 Nitro::saveMany($messages, function (): void {
@@ -243,9 +264,12 @@ explicit non-empty scope, so an accidental table-wide delete is rejected.
 
 ## Schema evolution
 
-`Nitro::prepare()` reconciles newly declared fields with an existing table.
-Missing columns are added sequentially on the native SQLite worker, preserving
-all cached rows. Give a new non-nullable property a domain-safe default:
+`Nitro::prepare()` stores a fingerprint of every table's columns and indexes in
+`nitro_meta`. A normal boot costs one native query; a process that already
+verified the schema costs none. When a model changes, every new table, missing
+column and index is applied in one native transaction, preserving all cached
+rows. Prepare all models in one `Nitro::prepare()` call to pay that single
+query once. Give a new non-nullable property a domain-safe default:
 
 ```php
 #[Field]
