@@ -41,7 +41,7 @@
     },
     "scripts": {
         "test": "phpunit",
-        "analyse": "phpstan analyse --configuration=phpstan.neon",
+        "analyse": "phpstan analyse --configuration=phpstan.neon --memory-limit=1G",
         "benchmark": "php benchmarks/cache.php"
     },
     "support": {

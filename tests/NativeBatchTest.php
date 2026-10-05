@@ -59,7 +59,7 @@ namespace Pam\Nitro\Tests {
                 ['m1', 'c1', 'Nitro', 1, 1, false, 'Sem prévia'],
                 ['m2', 'c1', 'Fast', 1, 2, false, 'Sem prévia'],
             ], $rows);
-            self::assertStringContainsString('ON CONFLICT', (string) $payload['sql']);
+            self::assertStringStartsWith('INSERT OR REPLACE INTO "messages"', (string) $payload['sql']);
         }
 
         public function testSaveManyRejectsAnEmptyBatch(): void
@@ -106,7 +106,7 @@ namespace Pam\Nitro\Tests {
             );
             self::assertSame(['c1'], $statements[0]['arguments']);
             self::assertStringContainsString(
-                'ON CONFLICT',
+                'INSERT OR REPLACE',
                 $statements[1]['sql'],
             );
             self::assertCount(2, $statements[1]['argumentSets']);

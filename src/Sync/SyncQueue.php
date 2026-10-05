@@ -64,10 +64,10 @@ final class SyncQueue
 
         $timestamp = $now ?? time();
         return Nitro::connection()->execute(
-            'INSERT INTO "nitro_outbox_mutations" '
+            'INSERT OR IGNORE INTO "nitro_outbox_mutations" '
                 .'("id", "entity_kind", "entity_id", "operation", "payload", "state", '
                 .'"attempts", "available_at", "created_at", "updated_at", "last_error") '
-                .'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT("id") DO NOTHING',
+                .'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $key,
                 $entityKind->value,

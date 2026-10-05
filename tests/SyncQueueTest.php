@@ -52,7 +52,7 @@ final class SyncQueueTest extends TestCase
         self::assertSame('execute', NativeBatchTest::$call['method']);
         $payload = Wire::decodeMap(NativeBatchTest::$call['payload']);
         self::assertStringContainsString('nitro_outbox_mutations', (string) $payload['sql']);
-        self::assertStringContainsString('ON CONFLICT("id") DO NOTHING', (string) $payload['sql']);
+        self::assertStringStartsWith('INSERT OR IGNORE INTO', (string) $payload['sql']);
         self::assertSame(
             [
                 'mutation:message:0001',
@@ -248,7 +248,7 @@ final class SyncQueueTest extends TestCase
         self::assertCount(3, $statements);
         self::assertStringContainsString('DELETE FROM "messages"', $statements[0]['sql']);
         self::assertSame(['message-old'], $statements[0]['arguments']);
-        self::assertStringContainsString('ON CONFLICT("id")', $statements[1]['sql']);
+        self::assertStringStartsWith('INSERT OR REPLACE INTO', $statements[1]['sql']);
         self::assertCount(1, $statements[1]['argumentSets']);
         self::assertStringContainsString('nitro_sync_cursors', $statements[2]['sql']);
         self::assertSame(['messages:chat-1', 'cursor-2', 4_000], $statements[2]['arguments']);

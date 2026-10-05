@@ -6,6 +6,7 @@ namespace Pam\Nitro\Sync;
 
 use Closure;
 use InvalidArgumentException;
+use Pam\Nitro\Internal\Sql;
 use Pam\Nitro\Model;
 use Pam\Nitro\Nitro;
 use Pam\Nitro\Schema\ModelSchema;
@@ -82,15 +83,14 @@ final class DeltaApplier
                 $argumentSets[] = array_values($item->attributes());
             }
             $statements[] = [
-                'sql' => self::upsertSql($schema),
+                'sql' => Sql::upsert($schema),
                 'argumentSets' => $argumentSets,
             ];
         }
 
         $statements[] = [
-            'sql' => 'INSERT INTO "nitro_sync_cursors" ("scope", "cursor", "updated_at") '
-                .'VALUES (?, ?, ?) ON CONFLICT("scope") DO UPDATE SET '
-                .'"cursor" = excluded."cursor", "updated_at" = excluded."updated_at"',
+            'sql' => 'INSERT OR REPLACE INTO "nitro_sync_cursors" ("scope", "cursor", "updated_at") '
+                .'VALUES (?, ?, ?)',
             'arguments' => [$scope, $cursor, $now ?? time()],
         ];
 
@@ -110,26 +110,6 @@ final class DeltaApplier
                 $callback(is_string($value) ? $value : null);
             },
         );
-    }
-
-    private static function upsertSql(ModelSchema $schema): string
-    {
-        $columns = array_column($schema->columns, 'name');
-        $updates = array_values(array_filter(
-            $columns,
-            static fn (string $column): bool => $column !== $schema->primary->name,
-        ));
-        $conflict = $updates === []
-            ? 'DO NOTHING'
-            : 'DO UPDATE SET '.implode(', ', array_map(
-                static fn (string $column): string => '"'.$column.'" = excluded."'.$column.'"',
-                $updates,
-            ));
-
-        return 'INSERT INTO "'.$schema->table.'" ("'
-            .implode('", "', $columns).'") VALUES ('
-            .implode(', ', array_fill(0, count($columns), '?')).') '
-            .'ON CONFLICT("'.$schema->primary->name.'") '.$conflict;
     }
 
     private static function assertToken(string $name, string $value, int $maximum): void

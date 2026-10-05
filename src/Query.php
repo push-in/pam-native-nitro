@@ -78,6 +78,27 @@ final class Query
         );
     }
 
+    /** @return class-string<Model> */
+    public function model(): string
+    {
+        return $this->model;
+    }
+
+    public function maxRows(): int
+    {
+        return $this->limit;
+    }
+
+    /**
+     * Compiled SELECT statement and its positional arguments.
+     *
+     * @return array{string, list<string|int|float|bool|null>}
+     */
+    public function toSql(): array
+    {
+        return $this->compile();
+    }
+
     /** @return array{string, list<string|int|float|bool|null>} */
     private function compile(): array
     {
