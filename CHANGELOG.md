@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 - 2026-10-05
+
+- iOS: prepared statements are now reused natively (PAM Native 1.9.1 adds a
+  per-database statement cache to the iOS SQLite module), so repeated
+  upserts, `batch()` chunks and paged reads skip re-preparing SQL like on
+  Android. No PHP API change; documented in `docs/architecture.md`.
+
 ## 0.5.1 - 2026-10-05
 
 - Never exceed the PAM Native one-MiB bridge limit. Every write is measured

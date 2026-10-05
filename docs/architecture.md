@@ -35,8 +35,11 @@ PAM Native opens application-private databases with:
 
 Database I/O runs outside the UI renderer: Android uses a dedicated
 single-thread executor and iOS a serial dispatch queue, so statements execute
-in submission order without blocking the main thread. Android additionally
-reuses compiled statements through `SQLiteDatabase`'s per-connection cache.
+in submission order without blocking the main thread. Both platforms reuse
+compiled statements: Android through `SQLiteDatabase`'s per-connection cache,
+iOS (PAM Native 1.9.1+) through a 32-entry LRU of prepared `sqlite3_stmt`
+handles per database, reset right after each call so cached reads never hold
+a WAL snapshot.
 Every query result, however many rows, arrives as one module result. A
 completed callback schedules only the state change the application requested.
 
