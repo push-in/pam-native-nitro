@@ -80,6 +80,33 @@ statement executed per argument set.
 them back per query and preserves each query's order. The combined row budget
 is the bridge limit of 1,000 rows.
 
+## Bridge size limit
+
+PAM Native rejects any module request or result larger than one MiB. Nitro
+measures every encoded payload before it crosses the bridge and packs work
+under a 768 KiB budget:
+
+- **Writes that fit** remain ONE native call and ONE transaction.
+- **Larger transactions** (`batch()`, `replaceMany()`, `saveMany()`, deltas)
+  are staged. Rows of every `INSERT ... VALUES (?, ...)` statement are written,
+  in as many calls as needed, to `nitro_staging_<width>` under a random token;
+  the target tables are not touched. ONE final transaction then runs the
+  original statements in order, with each staged insert replaced by
+  `INSERT ... SELECT ... ORDER BY "nitro_seq"`, and deletes the token's rows.
+  Any failure leaves the target tables unchanged; staging rows are removed by a
+  best-effort cleanup call and, at the latest, by the next staged write. Only
+  oversized non-insert statements (thousands of raw `UPDATE` argument sets) are
+  split into ordered sequential transactions without whole-batch atomicity.
+- **Reads** first try ONE query. If the native side reports an oversized
+  result, Nitro reads the byte size of every row in one small query, then reads
+  consecutive `LIMIT`/`OFFSET` windows under the budget, halving any window
+  that still overflows. Rows keep the statement's order; a write issued while a
+  paged read is in flight may be visible to later windows only.
+- A single row that cannot fit one payload is reported as a failure.
+
+Native failures are delivered to the optional `$failure` callback of every API,
+or to `Nitro::onFailure()`, and are never thrown from module result callbacks.
+
 Upserts use `INSERT OR REPLACE` with every model column. That is equivalent to
 a primary-key UPSERT for Nitro models and works on SQLite 3.18 (Android 8),
 whereas `ON CONFLICT DO UPDATE` requires SQLite 3.24 (Android 11).
@@ -87,7 +114,8 @@ whereas `ON CONFLICT DO UPDATE` requires SQLite 3.24 (Android 11).
 ## Safety limits
 
 - at most 10,000 argument sets per bulk write;
-- at most 1,000 rows and 256 columns per bridged query;
+- at most 1,000 rows and 256 columns per query, paged under one MiB per result;
+- every native request and result stays under the one-MiB bridge limit;
 - bound values only; identifiers come exclusively from reflected model schema;
 - integer-backed enums for every coded domain value.
 

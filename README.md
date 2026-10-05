@@ -79,6 +79,8 @@ process and renders real platform controls without JavaScript or WebViews.
 - WAL, `synchronous=NORMAL` and prepared-statement reuse in the PAM runtime.
 - One native round-trip per boot to verify the schema fingerprint.
 - `Nitro::batch()` and `Nitro::fetch()` for one-call writes and reads.
+- Payloads never exceed the one-MiB PAM Native bridge: large writes are staged
+  and committed atomically, large results are paged.
 - Lazy models: no full-database hydration.
 - Bounded, indexed, paginated queries.
 - Integer-backed enums for coded domain values.
@@ -207,9 +209,16 @@ Nitro::replaceMany(
     $freshMessages,
     ['chat_id' => $chatId],
     function (): void {
-        // The old chat snapshot and every new upsert commit atomically.
+        // The old chat snapshot and every new upsert commit atomically,
+        // even when the snapshot is larger than one bridge payload.
+    },
+    function (string $error): void {
+        // Native failures arrive here; nothing is thrown.
     },
 );
+
+// Failures of calls made without a $failure callback.
+Nitro::onFailure(fn (string $error) => error_log($error));
 
 $message->delete();
 

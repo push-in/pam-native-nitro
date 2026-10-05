@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.5.1 - 2026-10-05
+
+- Never exceed the PAM Native one-MiB bridge limit. Every write is measured
+  before it crosses the bridge: payloads that fit a 768 KiB budget stay one
+  native call; larger `batch()`, `replaceMany()`, `saveMany()`, delta and raw
+  transactions are split transparently. Long chat histories saved with
+  `replaceMany()` no longer fail with "Native module value is too large".
+- Oversized transactions stay atomic: rows of every `INSERT ... VALUES`
+  statement are staged under a random token in `nitro_staging_<width>` across
+  as many calls as needed, then ONE final transaction runs the original
+  statements in order (staged inserts become `INSERT ... SELECT`) and clears the
+  staging rows. A failure at any step leaves the target tables untouched, so a
+  `replaceMany()` scope is never half-replaced. Only oversized non-insert
+  statements (for example thousands of raw `UPDATE` argument sets) fall back to
+  ordered sequential transactions.
+- Reads page when a result does not fit one bridge payload: `Query::get()`,
+  `first()`, `Model::find()`, `Nitro::fetch()` and `Connection::query()` measure
+  row sizes in one small query and read ordered `LIMIT`/`OFFSET` windows under
+  the budget, splitting a window again if escaping still overflows. Results
+  that fit keep the single-call path.
+- Native failures are delivered to new optional `$failure` callbacks
+  (`Nitro::batch()`, `fetch()`, `save()`, `delete()`, `deleteWhere()`,
+  `saveMany()`, `replaceMany()`, `prepare()`, `createTable()`, `Query::get()`,
+  `first()`, `Model::find()`/`save()`/`delete()`, `Connection` methods,
+  `SyncQueue` and `DeltaApplier`) and are never thrown from inside a module
+  result callback. Calls without a callback report to `Nitro::onFailure()`, or
+  to the PHP error log when no handler is set.
+- A single row larger than the bridge limit is reported as a failure before
+  any native call instead of crashing.
+
 ## 0.5.0 - 2026-10-05
 
 - Boot schema reconciliation is fingerprint-gated: per-table fingerprints of

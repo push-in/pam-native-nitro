@@ -6,7 +6,9 @@ namespace Pam\Nitro;
 
 use Closure;
 use InvalidArgumentException;
+use Pam\Nitro\Internal\Bridge;
 use Pam\Nitro\Schema\ModelSchema;
+use Throwable;
 
 final class Query
 {
@@ -55,26 +57,44 @@ final class Query
         return $copy;
     }
 
-    /** @param Closure(list<Model>): void $callback */
-    public function get(Closure $callback): int
+    /**
+     * Results larger than one bridge payload are read in pages transparently.
+     *
+     * @param Closure(list<Model>): void $callback
+     * @param Closure(string): void|null $failure receives native failures
+     */
+    public function get(Closure $callback, ?Closure $failure = null): int
     {
         [$sql, $arguments] = $this->compile();
+        $failure = Bridge::failure($failure);
 
         return $this->connection->query(
             $sql,
             $arguments,
-            function (array $rows) use ($callback): void {
+            function (array $rows) use ($callback, $failure): void {
                 $model = $this->model;
-                $callback(array_map($model::hydrate(...), $rows));
+                try {
+                    $models = array_map($model::hydrate(...), $rows);
+                } catch (Throwable $error) {
+                    $failure('Nitro could not hydrate '.$model.': '.$error->getMessage());
+
+                    return;
+                }
+                $callback($models);
             },
+            $failure,
         );
     }
 
-    /** @param Closure(?Model): void $callback */
-    public function first(Closure $callback): int
+    /**
+     * @param Closure(?Model): void $callback
+     * @param Closure(string): void|null $failure receives native failures
+     */
+    public function first(Closure $callback, ?Closure $failure = null): int
     {
         return $this->limit(1)->get(
             static fn (array $models) => $callback($models[0] ?? null),
+            $failure,
         );
     }
 

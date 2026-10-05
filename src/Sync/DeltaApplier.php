@@ -21,13 +21,13 @@ final class DeltaApplier
     }
 
     /** @param list<class-string<Model>> $models */
-    public static function prepare(array $models, Closure $callback): int
+    public static function prepare(array $models, Closure $callback, ?Closure $failure = null): int
     {
         if ($models === []) {
             throw new InvalidArgumentException('Delta preparation requires at least one model.');
         }
 
-        return Nitro::prepare([...$models, SyncCursor::class], $callback);
+        return Nitro::prepare([...$models, SyncCursor::class], $callback, $failure);
     }
 
     /**
@@ -45,6 +45,7 @@ final class DeltaApplier
         string $cursor,
         ?int $now = null,
         ?Closure $callback = null,
+        ?Closure $failure = null,
     ): int {
         self::assertToken('scope', $scope, 256);
         self::assertToken('cursor', $cursor, 4_096);
@@ -94,11 +95,11 @@ final class DeltaApplier
             'arguments' => [$scope, $cursor, $now ?? time()],
         ];
 
-        return Nitro::connection()->transaction($statements, $callback);
+        return Nitro::connection()->transaction($statements, $callback, $failure);
     }
 
     /** @param Closure(?string): void $callback */
-    public static function cursor(string $scope, Closure $callback): int
+    public static function cursor(string $scope, Closure $callback, ?Closure $failure = null): int
     {
         self::assertToken('scope', $scope, 256);
 
@@ -109,6 +110,7 @@ final class DeltaApplier
                 $value = $rows[0]['cursor'] ?? null;
                 $callback(is_string($value) ? $value : null);
             },
+            $failure,
         );
     }
 

@@ -26,22 +26,25 @@ abstract class Model
         return Nitro::query(static::class);
     }
 
-    final public static function find(string|int $id, \Closure $callback): int
-    {
+    final public static function find(
+        string|int $id,
+        \Closure $callback,
+        ?\Closure $failure = null,
+    ): int {
         return static::query()->where(
             ModelSchema::for(static::class)->primary->name,
             $id,
-        )->first($callback);
+        )->first($callback, $failure);
     }
 
-    final public function save(?\Closure $callback = null): int
+    final public function save(?\Closure $callback = null, ?\Closure $failure = null): int
     {
-        return Nitro::save($this, $callback);
+        return Nitro::save($this, $callback, $failure);
     }
 
-    final public function delete(?\Closure $callback = null): int
+    final public function delete(?\Closure $callback = null, ?\Closure $failure = null): int
     {
-        return Nitro::delete($this, $callback);
+        return Nitro::delete($this, $callback, $failure);
     }
 
     /** @return array<string, string|int|float|bool|null> */

@@ -15,12 +15,21 @@ use Throwable;
  * In-process emulation of the native `sqlite` module backed by PDO SQLite.
  *
  * Mirrors the Android module contract: query arguments bind as text, every
- * call is one round-trip and transactions roll back atomically on failure.
+ * call is one round-trip, transactions roll back atomically on failure and
+ * the PAM Native wire codec rejects requests and results above one MiB.
  */
 final class SqliteTransport implements NativeModuleTransport
 {
-    /** @var list<array{method: string, sql: string}> */
+    public const int WIRE_LIMIT = 1_048_576;
+
+    /** @var list<array{method: string, sql: string, bytes: int}> */
     public array $calls = [];
+
+    /** Largest request or result payload seen, in bytes. */
+    public int $largest = 0;
+
+    /** @var (Closure(string, string, string): ?string)|null returns a failure message to inject */
+    public ?Closure $fault = null;
 
     public PDO $pdo;
 
@@ -38,23 +47,40 @@ final class SqliteTransport implements NativeModuleTransport
         string $payload,
         Closure $complete,
     ): void {
+        $this->largest = max($this->largest, strlen($payload));
+        if (strlen($payload) > self::WIRE_LIMIT) {
+            $this->calls[] = ['method' => $method, 'sql' => '', 'bytes' => strlen($payload)];
+            $complete(ModuleResultStatus::Failure, 'Native module payload exceeds one MiB');
+
+            return;
+        }
         $values = Wire::decodeMap($payload);
         $sql = (string) ($values['sql'] ?? '');
-        $arguments = json_decode((string) ($values['arguments'] ?? '[]'), true, 512, JSON_THROW_ON_ERROR);
-        $this->calls[] = ['method' => $method, 'sql' => $sql];
+        $encodedArguments = (string) ($values['arguments'] ?? '[]');
+        $arguments = json_decode($encodedArguments, true, 512, JSON_THROW_ON_ERROR);
+        $this->calls[] = ['method' => $method, 'sql' => $sql, 'bytes' => strlen($payload)];
+        $fault = $this->fault === null ? null : ($this->fault)($method, $sql, $encodedArguments);
+        if ($fault !== null) {
+            $complete(ModuleResultStatus::Failure, $fault);
+
+            return;
+        }
         try {
             $result = match ($method) {
                 'execute' => $this->run($sql, self::list($arguments)),
-                'query' => Wire::map(['rows' => json_encode(
-                    $this->rows($sql, self::list($arguments)),
-                    JSON_THROW_ON_ERROR,
-                )]),
+                'query' => $this->result($this->rows($sql, self::list($arguments))),
                 'executeMany' => $this->atomic(function () use ($sql, $arguments): void {
+                    if (count(self::list($arguments)) > 10_000) {
+                        throw new \RuntimeException('SQLite executeMany requires between 1 and 10000 argument sets');
+                    }
                     foreach (self::list($arguments) as $set) {
                         $this->run($sql, self::list($set));
                     }
                 }),
                 'transaction' => $this->atomic(function () use ($arguments): void {
+                    if (count(self::list($arguments)) > 10_000) {
+                        throw new \RuntimeException('SQLite transaction requires between 1 and 10000 statements');
+                    }
                     foreach (self::list($arguments) as $statement) {
                         $statement = is_array($statement) ? $statement : [];
                         $sets = isset($statement['argumentSets'])
@@ -73,6 +99,27 @@ final class SqliteTransport implements NativeModuleTransport
             return;
         }
         $complete(ModuleResultStatus::Success, $result);
+    }
+
+    /**
+     * Android encodes rows with org.json: raw UTF-8, escaped slashes, and a
+     * 1000-row cap, inside a wire map limited to one MiB.
+     *
+     * @param list<array<string, mixed>> $rows
+     */
+    private function result(array $rows): string
+    {
+        if (count($rows) > 1_000) {
+            throw new \RuntimeException('SQLite query exceeded the 1000-row bridge limit; paginate the query');
+        }
+        $json = json_encode($rows, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        if (strlen($json) > self::WIRE_LIMIT) {
+            throw new \RuntimeException('Native module value is too large');
+        }
+        $result = Wire::map(['rows' => $json]);
+        $this->largest = max($this->largest, strlen($result));
+
+        return $result;
     }
 
     /** @return list<string> */

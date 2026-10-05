@@ -91,11 +91,18 @@ final class BatchFetchTest extends TestCase
 
     public function testBatchFailureRollsBackEveryStatement(): void
     {
+        $failure = null;
         Nitro::batch(static function (Batch $batch): void {
             $batch->save(self::message('m1', 1))
                 ->execute('INSERT INTO "missing_table" VALUES (1)');
+        }, static function (): void {
+            self::fail('A failed batch must not report success.');
+        }, static function (string $message) use (&$failure): void {
+            $failure = $message;
         });
 
+        self::assertIsString($failure);
+        self::assertStringContainsString('missing_table', $failure);
         self::assertSame([], $this->native->select('SELECT id FROM messages'));
     }
 

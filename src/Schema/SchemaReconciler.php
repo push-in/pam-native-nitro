@@ -54,6 +54,7 @@ final class SchemaReconciler
         Connection $connection,
         array $schemas,
         Closure $callback,
+        ?Closure $failure = null,
     ): int {
         $pending = [];
         foreach ($schemas as $schema) {
@@ -68,8 +69,8 @@ final class SchemaReconciler
             return 0;
         }
         $pending = array_values($pending);
-        $apply = static function (array $rows) use ($connection, $pending, $callback): void {
-            self::apply($connection, $pending, $rows, $callback);
+        $apply = static function (array $rows) use ($connection, $pending, $callback, $failure): void {
+            self::apply($connection, $pending, $rows, $callback, $failure);
         };
 
         return $connection->attempt(
@@ -77,8 +78,8 @@ final class SchemaReconciler
             $apply,
             // The metadata table does not exist yet (fresh install or upgrade
             // from Nitro < 0.5): inspect every declared table instead.
-            static function () use ($connection, $pending, $apply): void {
-                $connection->query(self::staleTablesSql($pending, false), [], $apply);
+            static function () use ($connection, $pending, $apply, $failure): void {
+                $connection->query(self::staleTablesSql($pending, false), [], $apply, $failure);
             },
         );
     }
@@ -124,6 +125,7 @@ final class SchemaReconciler
         array $pending,
         array $rows,
         Closure $callback,
+        ?Closure $failure,
     ): void {
         $stale = [];
         foreach ($rows as $row) {
@@ -151,7 +153,7 @@ final class SchemaReconciler
 
             return;
         }
-        $connection->transaction($statements, $verify);
+        $connection->transaction($statements, $verify, $failure);
     }
 
     /**

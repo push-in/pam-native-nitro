@@ -19,9 +19,9 @@ final class SyncQueue
     {
     }
 
-    public static function prepare(Closure $callback): int
+    public static function prepare(Closure $callback, ?Closure $failure = null): int
     {
-        return Nitro::prepare([OutboxMutation::class], $callback);
+        return Nitro::prepare([OutboxMutation::class], $callback, $failure);
     }
 
     /**
@@ -38,6 +38,7 @@ final class SyncQueue
         ?string $idempotencyKey = null,
         ?int $now = null,
         ?Closure $callback = null,
+        ?Closure $failure = null,
     ): int {
         self::assertEntityKind($entityKind);
         $identifier = trim((string) $entityId);
@@ -82,12 +83,20 @@ final class SyncQueue
                 null,
             ],
             $callback,
+            $failure,
         );
     }
 
-    /** @param Closure(list<OutboxMutation>): void $callback */
-    public static function due(Closure $callback, int $limit = 100, ?int $now = null): int
-    {
+    /**
+     * @param Closure(list<OutboxMutation>): void $callback
+     * @param Closure(string): void|null $failure receives native failures
+     */
+    public static function due(
+        Closure $callback,
+        int $limit = 100,
+        ?int $now = null,
+        ?Closure $failure = null,
+    ): int {
         if ($limit < 1 || $limit > 1_000) {
             throw new InvalidArgumentException('Sync batch limit must be between 1 and 1000.');
         }
@@ -99,6 +108,7 @@ final class SyncQueue
                 .'ORDER BY "created_at" ASC LIMIT '.$limit,
             [MutationState::Pending->value, MutationState::RetryScheduled->value, $timestamp],
             static fn (array $rows) => $callback(array_map(OutboxMutation::hydrate(...), $rows)),
+            $failure,
         );
     }
 
@@ -107,6 +117,7 @@ final class SyncQueue
         int $attempts,
         ?int $now = null,
         ?Closure $callback = null,
+        ?Closure $failure = null,
     ): int {
         if ($attempts < 1) {
             throw new InvalidArgumentException('attempts must be greater than zero.');
@@ -120,6 +131,8 @@ final class SyncQueue
             null,
             $callback,
             [MutationState::Pending, MutationState::RetryScheduled],
+            null,
+            $failure,
         );
     }
 
@@ -127,6 +140,7 @@ final class SyncQueue
         string $idempotencyKey,
         ?int $now = null,
         ?Closure $callback = null,
+        ?Closure $failure = null,
     ): int {
         return Nitro::connection()->execute(
             'UPDATE "nitro_outbox_mutations" SET "state" = ?, "updated_at" = ?, '
@@ -138,6 +152,7 @@ final class SyncQueue
                 MutationState::InFlight->value,
             ],
             $callback,
+            $failure,
         );
     }
 
@@ -148,6 +163,7 @@ final class SyncQueue
         ?RetryPolicy $policy = null,
         ?int $now = null,
         ?Closure $callback = null,
+        ?Closure $failure = null,
     ): int {
         $policy ??= new RetryPolicy();
         if ($attempts < 1) {
@@ -170,6 +186,7 @@ final class SyncQueue
             $callback,
             [MutationState::InFlight],
             $timestamp,
+            $failure,
         );
     }
 
@@ -183,6 +200,7 @@ final class SyncQueue
         ?Closure $callback,
         array $from,
         ?int $updatedAt = null,
+        ?Closure $failure = null,
     ): int {
         if ($from === []) {
             throw new InvalidArgumentException('A mutation transition requires source states.');
@@ -207,6 +225,7 @@ final class SyncQueue
                 .'WHERE "id" = ? AND "state" IN ('.$placeholders.')',
             $arguments,
             $callback,
+            $failure,
         );
     }
 

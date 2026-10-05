@@ -6,13 +6,18 @@ namespace Pam\Nitro;
 
 use Closure;
 use LogicException;
+use Pam\Nitro\Internal\Bridge;
 use Pam\Nitro\Internal\Sql;
 use Pam\Nitro\Schema\ModelSchema;
 use Pam\Nitro\Schema\SchemaReconciler;
+use Throwable;
 
 final class Nitro
 {
     private static ?Connection $connection = null;
+
+    /** @var (Closure(string): void)|null */
+    private static ?Closure $failureHandler = null;
 
     private function __construct()
     {
@@ -34,10 +39,13 @@ final class Nitro
      *
      * @param class-string<Model> $model
      */
-    public static function createTable(string $model, ?Closure $callback = null): int
-    {
+    public static function createTable(
+        string $model,
+        ?Closure $callback = null,
+        ?Closure $failure = null,
+    ): int {
         return self::prepare([$model], $callback ?? static function (): void {
-        });
+        }, $failure);
     }
 
     /**
@@ -48,8 +56,9 @@ final class Nitro
      * one additional native transaction.
      *
      * @param list<class-string<Model>> $models
+     * @param Closure(string): void|null $failure
      */
-    public static function prepare(array $models, Closure $callback): int
+    public static function prepare(array $models, Closure $callback, ?Closure $failure = null): int
     {
         if ($models === []) {
             $callback();
@@ -61,17 +70,27 @@ final class Nitro
             self::connection(),
             array_map(ModelSchema::for(...), $models),
             $callback,
+            $failure,
         );
     }
 
     /**
-     * Applies every write collected by $build through ONE native call and ONE
-     * SQLite transaction. An empty batch invokes the callback immediately.
+     * Applies every write collected by $build atomically.
+     *
+     * A batch that fits one bridge payload is ONE native call and ONE SQLite
+     * transaction. A larger batch (for example replaceMany() with a long
+     * history) is staged in as many calls as needed and committed by ONE final
+     * transaction, so a scope is never left half-replaced. An empty batch
+     * invokes the callback immediately.
      *
      * @param Closure(Batch): mixed $build
+     * @param Closure(string): void|null $failure receives native failures
      */
-    public static function batch(Closure $build, ?Closure $callback = null): int
-    {
+    public static function batch(
+        Closure $build,
+        ?Closure $callback = null,
+        ?Closure $failure = null,
+    ): int {
         $batch = new Batch();
         $build($batch);
         if ($batch->isEmpty()) {
@@ -80,19 +99,21 @@ final class Nitro
             return 0;
         }
 
-        return self::connection()->transaction($batch->statements(), $callback);
+        return self::connection()->transaction($batch->statements(), $callback, $failure);
     }
 
     /**
      * Runs several model queries through ONE native call and ONE result.
      *
-     * Results keep the keys of $queries and the order of every query.
+     * Results keep the keys of $queries and the order of every query. Results
+     * larger than one bridge payload are read in pages transparently.
      *
      * @template TKey of array-key
      * @param array<TKey, Query> $queries
      * @param Closure(array<TKey, list<Model>>): void $callback
+     * @param Closure(string): void|null $failure receives native failures
      */
-    public static function fetch(array $queries, Closure $callback): int
+    public static function fetch(array $queries, Closure $callback, ?Closure $failure = null): int
     {
         if ($queries === []) {
             $callback([]);
@@ -118,6 +139,11 @@ final class Nitro
         if ($width >= 256) {
             throw new \InvalidArgumentException('Nitro fetch supports at most 255 columns.');
         }
+        $columns = ['nitro_query'];
+        for ($index = 0; $index < $width; ++$index) {
+            $columns[] = 'c'.$index;
+        }
+        $failure = Bridge::failure($failure);
         foreach (array_values($queries) as $offset => $query) {
             [$sql, $queryArguments] = $query->toSql();
             $projection = [$offset.' AS "nitro_query"'];
@@ -133,27 +159,35 @@ final class Nitro
         return self::connection()->query(
             implode(' UNION ALL ', $arms),
             $arguments,
-            static function (array $rows) use ($keys, $schemas, $callback): void {
+            static function (array $rows) use ($keys, $schemas, $callback, $failure): void {
                 $results = array_fill_keys($keys, []);
-                foreach ($rows as $row) {
-                    $offset = (int) ($row['nitro_query'] ?? -1);
-                    $schema = $schemas[$offset] ?? null;
-                    if ($schema === null) {
-                        continue;
+                try {
+                    foreach ($rows as $row) {
+                        $offset = (int) ($row['nitro_query'] ?? -1);
+                        $schema = $schemas[$offset] ?? null;
+                        if ($schema === null) {
+                            continue;
+                        }
+                        $values = [];
+                        foreach ($schema->columns as $index => $column) {
+                            $values[$column->name] = $row['c'.$index] ?? null;
+                        }
+                        $model = $schema->model;
+                        $results[$keys[$offset]][] = $model::hydrate($values);
                     }
-                    $values = [];
-                    foreach ($schema->columns as $index => $column) {
-                        $values[$column->name] = $row['c'.$index] ?? null;
-                    }
-                    $model = $schema->model;
-                    $results[$keys[$offset]][] = $model::hydrate($values);
+                } catch (Throwable $error) {
+                    $failure('Nitro could not hydrate fetched rows: '.$error->getMessage());
+
+                    return;
                 }
                 $callback($results);
             },
+            $failure,
+            $columns,
         );
     }
 
-    public static function save(Model $model, ?Closure $callback = null): int
+    public static function save(Model $model, ?Closure $callback = null, ?Closure $failure = null): int
     {
         $schema = ModelSchema::for($model::class);
         $values = $model->attributes();
@@ -162,10 +196,11 @@ final class Nitro
             Sql::upsert($schema),
             array_values($values),
             $callback,
+            $failure,
         );
     }
 
-    public static function delete(Model $model, ?Closure $callback = null): int
+    public static function delete(Model $model, ?Closure $callback = null, ?Closure $failure = null): int
     {
         $schema = ModelSchema::for($model::class);
         $primary = $schema->primary;
@@ -174,6 +209,7 @@ final class Nitro
             Sql::deleteByPrimaryKey($schema),
             [$model->{$primary->property}],
             $callback,
+            $failure,
         );
     }
 
@@ -185,6 +221,7 @@ final class Nitro
         string $model,
         array $scope,
         ?Closure $callback = null,
+        ?Closure $failure = null,
     ): int {
         if ($scope === []) {
             throw new \InvalidArgumentException(
@@ -198,16 +235,21 @@ final class Nitro
             'DELETE FROM "'.$schema->table.'" WHERE '.implode(' AND ', $clauses),
             $arguments,
             $callback,
+            $failure,
         );
     }
 
     /**
-     * Persists homogeneous models through one bridge call and one native transaction.
+     * Persists homogeneous models atomically: ONE native call when they fit one
+     * bridge payload, a staged commit otherwise.
      *
      * @param list<Model> $models
      */
-    public static function saveMany(array $models, ?Closure $callback = null): int
-    {
+    public static function saveMany(
+        array $models,
+        ?Closure $callback = null,
+        ?Closure $failure = null,
+    ): int {
         if ($models === []) {
             throw new \InvalidArgumentException('Nitro saveMany requires at least one model.');
         }
@@ -230,11 +272,13 @@ final class Nitro
             Sql::upsert($schema),
             $argumentSets,
             $callback,
+            $failure,
         );
     }
 
     /**
-     * Atomically replaces every row inside a scoped collection snapshot.
+     * Atomically replaces every row inside a scoped collection snapshot, even
+     * when the snapshot is larger than one bridge payload.
      *
      * @param class-string<Model> $model
      * @param list<Model> $models
@@ -245,6 +289,7 @@ final class Nitro
         array $models,
         array $scope,
         ?Closure $callback = null,
+        ?Closure $failure = null,
     ): int {
         if ($scope === []) {
             throw new \InvalidArgumentException(
@@ -258,7 +303,29 @@ final class Nitro
         }
         $batch = (new Batch())->replaceMany($model, $models, $scope);
 
-        return self::connection()->transaction($batch->statements(), $callback);
+        return self::connection()->transaction($batch->statements(), $callback, $failure);
+    }
+
+    /**
+     * Receives native failures of calls made without a failure callback.
+     * Without a handler they are written to the PHP error log.
+     *
+     * @param (Closure(string): void)|null $handler
+     */
+    public static function onFailure(?Closure $handler): void
+    {
+        self::$failureHandler = $handler;
+    }
+
+    /** @internal Delivers a failure that no caller-specific callback handles. */
+    public static function reportFailure(string $message): void
+    {
+        if (self::$failureHandler !== null) {
+            (self::$failureHandler)($message);
+
+            return;
+        }
+        error_log('pam-native-nitro: '.$message);
     }
 
     public static function connection(): Connection
