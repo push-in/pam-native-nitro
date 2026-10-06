@@ -383,7 +383,7 @@ log).
 | `fetch(array $queries, Closure(array<key, list<Model>>) $callback, ?Closure $failure = null)` | Several queries, one native call. |
 | `batch(Closure(Batch) $build, ?Closure $callback = null, ?Closure $failure = null)` | Heterogeneous writes in one transaction. |
 | `save(Model)`, `delete(Model)`, `saveMany(array $models)` (1–10000), `deleteWhere(string $model, array $scope)` | Writes; `deleteWhere()` needs a non-empty scope. |
-| `replaceMany(string $model, array $models, array $scope, ?Closure $callback = null, ?Closure $failure = null)` | Atomically replaces every row of `$scope` with `$models`. |
+| `replaceMany(string $model, array $models, array $scope, ?Closure $callback = null, ?Closure $failure = null)` | Atomically replaces every row of `$scope` with up to 9999 `$models`. |
 | `onFailure(?Closure(string) $handler)` | Handler for failures without a `$failure` callback. |
 | `connection(): Connection` | The booted connection (`LogicException` before `boot()`). |
 
