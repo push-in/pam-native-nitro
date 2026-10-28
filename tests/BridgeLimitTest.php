@@ -38,7 +38,7 @@ final class BridgeLimitTest extends TestCase
         });
         Nitro::prepare([Message::class, Post::class], static function (): void {
         });
-        $this->native->calls = [];
+        $this->native->forgetCalls();
         $this->native->largest = 0;
     }
 
@@ -53,7 +53,7 @@ final class BridgeLimitTest extends TestCase
     {
         $this->seed('chat-1', 50, 'old');
         $this->seed('chat-2', 3, 'other');
-        $this->native->calls = [];
+        $this->native->forgetCalls();
         $records = self::history('chat-1', 4_000, 900);
         self::assertGreaterThan(3 * SqliteTransport::WIRE_LIMIT, self::encodedSize($records));
 
@@ -243,7 +243,7 @@ final class BridgeLimitTest extends TestCase
             $records[] = self::message(sprintf('m%04d', $index), 'chat-1', $body.$index, $index);
         }
         Nitro::saveMany($records);
-        $this->native->calls = [];
+        $this->native->forgetCalls();
         $this->native->largest = 0;
 
         $models = null;
@@ -272,7 +272,7 @@ final class BridgeLimitTest extends TestCase
         $post->id = 'p1';
         $post->body = 'post';
         Nitro::save($post);
-        $this->native->calls = [];
+        $this->native->forgetCalls();
 
         $results = null;
         Nitro::fetch([
@@ -351,7 +351,7 @@ final class BridgeLimitTest extends TestCase
             $records[] = self::message($chat.'-m'.$index, $chat, $prefix.' '.$index, $index);
         }
         Nitro::saveMany($records);
-        $this->native->calls = [];
+        $this->native->forgetCalls();
     }
 
     /** @return list<Message> */

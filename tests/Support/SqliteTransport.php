@@ -122,6 +122,15 @@ final class SqliteTransport implements NativeModuleTransport
         return $result;
     }
 
+    /**
+     * Drops the recorded calls. A method (not `$calls = []`) so static
+     * analysis does not pin `$calls` to an empty array for the rest of a test.
+     */
+    public function forgetCalls(): void
+    {
+        $this->calls = [];
+    }
+
     /** @return list<string> */
     public function methods(): array
     {
