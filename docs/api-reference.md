@@ -40,11 +40,15 @@ integers). `ColumnType`: `Integer = 1`, `Real`, `Text`, `Blob`.
 ## `Query` (immutable)
 
 `where(string $column, string|int|float|bool|null $value)`,
-`orderBy(string $column, bool $descending = false)`,
-`latest(string $column = 'created_at')`, `limit(int $limit)` (clamped to
+`orderBy(string|list<string> $column, bool $descending = false)` (each call,
+and each column of a list, appends a sort key after the previous ones),
+`latest(string $column = 'created_at')` (appends a descending key),
+`limit(int $limit)` (clamped to
 1–1000), `get(Closure(list<Model>) $callback, ?Closure $failure = null)`,
 `first(Closure(?Model) $callback, ?Closure $failure = null)`, `model()`,
-`maxRows()`, `toSql()`. Unknown columns throw.
+`maxRows()`, `toSql()`. Unknown or repeated sort columns throw. End the sort
+with a unique column when rows can tie: upserts re-insert rows, so rowid and
+insertion order are not stable.
 
 ## `Batch`
 

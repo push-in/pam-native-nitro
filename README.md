@@ -151,6 +151,7 @@ Android 8 (API 26) or newer and iOS 15 or newer.
 - **A new property breaks old rows:** give non-nullable properties a default; renames and type changes need an explicit migration.
 - **Nothing happens and no error is shown:** register `Nitro::onFailure()` or pass `$failure`; failures are never thrown from native callbacks.
 - **Queries return at most 1000 rows:** `limit()` is clamped; page with `orderBy()` and a `where()` on the last key.
+- **Rows with the same timestamp come back in a different order after an edit:** saves re-insert the row (`INSERT OR REPLACE`, new rowid); add a unique tie-breaker, `->orderBy('created_at')->orderBy('id')`.
 
 <a id="tests-and-status"></a>
 ## <picture><img src=".github/assets/icons/flask.svg" width="22" height="22" alt=""></picture> Tests and status

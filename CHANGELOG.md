@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.3 - Unreleased
+
+- `Query::orderBy()` takes several sort keys: each call appends a key after
+  the previous ones (`->orderBy('created_at')->orderBy('id')` compiles to
+  `ORDER BY "created_at" ASC, "id" ASC`), and a list orders by every column in
+  the same direction (`->orderBy(['created_at', 'id'], descending: true)`).
+  `latest()` appends too. A repeated column, an empty list or a non-list array
+  throws `InvalidArgumentException`. Behaviour change: a second `orderBy()`
+  used to replace the first; it now breaks its ties.
+- Upserts keep `INSERT OR REPLACE`. `INSERT ... ON CONFLICT(pk) DO UPDATE`
+  would keep the rowid, but needs SQLite 3.24 and the Android `sqlite` module
+  uses the platform library: 3.18 on API 26-27 and 3.22 on API 28-29 (3.24+
+  from API 30 only), while PAM Native supports API 26. REPLACE gives a
+  rewritten row a new rowid, so order by model columns with a unique last key
+  (for example `created_at` then the primary key), never by rowid or by
+  insertion order. Documented in `Sql::upsert()` and `docs/architecture.md`.
+
 ## 0.5.2 - 2026-10-05
 
 - iOS: prepared statements are now reused natively (PAM Native 1.9.1 adds a
