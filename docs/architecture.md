@@ -110,9 +110,14 @@ under a 768 KiB budget:
 Native failures are delivered to the optional `$failure` callback of every API,
 or to `Nitro::onFailure()`, and are never thrown from module result callbacks.
 
-Upserts use `INSERT OR REPLACE` with every model column. That is equivalent to
-a primary-key UPSERT for Nitro models and works on SQLite 3.18 (Android 8),
-whereas `ON CONFLICT DO UPDATE` requires SQLite 3.24 (Android 11).
+Upserts use `INSERT OR REPLACE` with every model column. That stores the same
+values as a primary-key UPSERT for Nitro models and works on SQLite 3.18
+(Android 8), whereas `ON CONFLICT DO UPDATE` requires SQLite 3.24: the Android
+`sqlite` module uses the platform library, which ships 3.18 on API 26-27, 3.22
+on API 28-29 and 3.24+ only from API 30 (Android 11). REPLACE deletes the old
+row and inserts a new one, so a rewritten row gets a new rowid. Never rely on
+rowid or insertion order: end `Query::orderBy()` with a unique column
+(`->orderBy('created_at')->orderBy('id')`).
 
 ## Safety limits
 

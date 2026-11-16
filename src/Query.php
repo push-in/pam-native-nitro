@@ -14,8 +14,8 @@ final class Query
 {
     /** @var list<array{string, string|int|float|bool|null}> */
     private array $conditions = [];
-    private ?string $orderColumn = null;
-    private bool $descending = false;
+    /** @var list<array{string, bool}> column and descending, in priority order */
+    private array $orders = [];
     private int $limit = 100;
 
     /** @param class-string<Model> $model */
@@ -34,12 +34,29 @@ final class Query
         return $copy;
     }
 
-    public function orderBy(string $column, bool $descending = false): self
+    /**
+     * Adds sort keys after the ones already set: each call (or each column of
+     * a list, all in the same direction) only breaks ties of the previous
+     * keys, like SQL `ORDER BY a, b`. Use a unique, stable last key (for
+     * example the primary key) when rows can share a value; SQLite's rowid
+     * is not one, since upserts re-insert the row (`INSERT OR REPLACE`).
+     *
+     * @param string|array<string> $column one column or a non-empty list
+     */
+    public function orderBy(string|array $column, bool $descending = false): self
     {
-        $this->assertColumn($column);
+        $columns = is_string($column) ? [$column] : $column;
+        if ($columns === [] || !array_is_list($columns)) {
+            throw new InvalidArgumentException('Nitro orderBy() needs a column or a list of columns.');
+        }
         $copy = clone $this;
-        $copy->orderColumn = $column;
-        $copy->descending = $descending;
+        foreach ($columns as $name) {
+            $this->assertColumn($name);
+            if (in_array($name, array_column($copy->orders, 0), true)) {
+                throw new InvalidArgumentException("Nitro column {$name} is already ordered.");
+            }
+            $copy->orders[] = [$name, $descending];
+        }
 
         return $copy;
     }
@@ -133,8 +150,11 @@ final class Query
             }
             $sql .= ' WHERE '.implode(' AND ', $clauses);
         }
-        if ($this->orderColumn !== null) {
-            $sql .= ' ORDER BY "'.$this->orderColumn.'" '.($this->descending ? 'DESC' : 'ASC');
+        if ($this->orders !== []) {
+            $sql .= ' ORDER BY '.implode(', ', array_map(
+                static fn (array $order): string => '"'.$order[0].'" '.($order[1] ? 'DESC' : 'ASC'),
+                $this->orders,
+            ));
         }
         $sql .= ' LIMIT '.$this->limit;
 
