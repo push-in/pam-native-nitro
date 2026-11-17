@@ -100,7 +100,7 @@ Every native call is asynchronous and returns the module request id. Failures go
 
 | Platform | Support | Notes |
 | --- | --- | --- |
-| Android | API 26+ (Android 8) | Native SQLite through the PAM Native core module |
+| Android | API 24+ (Android 7) | Native SQLite through the PAM Native core module |
 | iOS | 15.0+ | Prepared statements reused natively with PAM Native 1.9.1+ |
 | PAM Native | `^0.8 \|\| ^0.9 \|\| ^0.10 \|\| ^1.0` | From `composer.json`; PHP 8.5+ |
 
@@ -133,7 +133,7 @@ Read the [architecture](docs/architecture.md) and
 [benchmark protocol](docs/benchmarks.md) before evaluating performance claims.
 
 PAM Native Nitro 0.5 supports PAM Native 0.8 through 1.x on PHP 8.5,
-Android 8 (API 26) or newer and iOS 15 or newer.
+Android 7 (API 24) or newer and iOS 15 or newer.
 
 <a id="compatibility"></a>
 ## <picture><img src=".github/assets/icons/grid.svg" width="22" height="22" alt=""></picture> Compatibility

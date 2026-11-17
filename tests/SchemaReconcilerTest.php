@@ -131,6 +131,48 @@ final class SchemaReconcilerTest extends TestCase
         self::assertSame(['query', 'query', 'transaction'], $this->native->methods());
     }
 
+    public function testSqliteWithoutTableValuedPragmasReadsTheStoredDdl(): void
+    {
+        // Android 7.x ships SQLite 3.9: no pragma_table_info() function.
+        $this->native->fault = static fn (string $method, string $sql): ?string =>
+            str_contains($sql, 'pragma_table_info(')
+                ? 'no such table: pragma_table_info (code 1): , while compiling: '.$sql
+                : null;
+        $this->native->pdo->exec('CREATE TABLE posts ("id" TEXT PRIMARY KEY NOT NULL)');
+
+        self::assertTrue($this->prepare([Post::class, Message::class]));
+        // pragma form fails, then the DDL form: guarded (no metadata yet) and full.
+        self::assertSame(['query', 'query', 'query', 'transaction'], $this->native->methods());
+        self::assertSame(
+            ['id', 'body'],
+            array_column($this->native->select('PRAGMA table_info("posts")'), 'name'),
+        );
+
+        // Next boot (new process): the pragma probe fails once, then the guarded DDL query.
+        SchemaReconciler::forget();
+        $this->native->calls = [];
+        self::assertTrue($this->prepare([Post::class, Message::class]));
+        self::assertSame(['query', 'query'], $this->native->methods());
+        $this->native->pdo->exec('UPDATE nitro_meta SET "value" = \'stale\'');
+        SchemaReconciler::forget();
+        $this->native->calls = [];
+        self::assertTrue($this->prepare([Post::class, Message::class]));
+        self::assertSame(['query', 'query', 'transaction'], $this->native->methods());
+    }
+
+    public function testColumnsFromDdlHandlesQuotingAndConstraints(): void
+    {
+        self::assertSame(
+            ['id' => true, 'chat id' => true, 'a"b' => true, 'plain' => true, 'tick' => true, 'square' => true, 'added' => true],
+            SchemaReconciler::columnsFromDdl(
+                'CREATE TABLE "t" ("id" TEXT PRIMARY KEY NOT NULL, "chat id" TEXT DEFAULT \'a,b\', '
+                .'"a""b" INTEGER CHECK ("a""b" IN (1, 2)), plain REAL, `tick` BLOB, [square] TEXT, '
+                .'PRIMARY KEY ("id"), UNIQUE (plain), CONSTRAINT c CHECK (1), "added" TEXT NOT NULL DEFAULT \'\')',
+            ),
+        );
+        self::assertSame([], SchemaReconciler::columnsFromDdl('nonsense'));
+    }
+
     public function testFingerprintTracksColumnsAndIndexes(): void
     {
         $message = SchemaReconciler::fingerprint(ModelSchema::for(Message::class));

@@ -6,6 +6,7 @@ namespace Pam\Nitro\Schema;
 
 use Closure;
 use Pam\Nitro\Connection;
+use Pam\Nitro\Internal\Bridge;
 use Pam\Nitro\Internal\Sql;
 
 /**
@@ -30,6 +31,13 @@ final class SchemaReconciler
 
     /** @var array<string, string> database and table => verified fingerprint */
     private static array $verified = [];
+
+    /**
+     * SQLite before 3.16 (Android 7.x ships 3.9) has no table-valued
+     * `pragma_table_info()`. Once a query reports it missing, the process
+     * reads each table's DDL from sqlite_master instead.
+     */
+    private static bool $legacyColumns = false;
 
     private function __construct()
     {
@@ -73,30 +81,72 @@ final class SchemaReconciler
             self::apply($connection, $pending, $rows, $callback, $failure);
         };
 
+        return self::inspect($connection, $pending, $apply, $failure);
+    }
+
+    /**
+     * @param list<array{ModelSchema, string}> $pending
+     * @param Closure(array<mixed>): void $apply
+     */
+    private static function inspect(
+        Connection $connection,
+        array $pending,
+        Closure $apply,
+        ?Closure $failure,
+    ): int {
+        $legacy = self::$legacyColumns;
+        $retryLegacy = static function (string $message) use ($connection, $pending, $apply, $failure, $legacy): bool {
+            if ($legacy || !self::missingPragmaFunction($message)) {
+                return false;
+            }
+            self::$legacyColumns = true;
+            self::inspect($connection, $pending, $apply, $failure);
+
+            return true;
+        };
+
         return $connection->attempt(
-            self::staleTablesSql($pending, true),
+            self::staleTablesSql($pending, true, $legacy),
             $apply,
             // The metadata table does not exist yet (fresh install or upgrade
             // from Nitro < 0.5): inspect every declared table instead.
-            static function () use ($connection, $pending, $apply, $failure): void {
-                $connection->query(self::staleTablesSql($pending, false), [], $apply, $failure);
+            static function (string $message = '') use ($connection, $pending, $apply, $failure, $legacy, $retryLegacy): void {
+                if ($retryLegacy($message)) {
+                    return;
+                }
+                $connection->query(
+                    self::staleTablesSql($pending, false, $legacy),
+                    [],
+                    $apply,
+                    static function (string $message) use ($failure, $retryLegacy): void {
+                        if (!$retryLegacy($message)) {
+                            Bridge::failure($failure)($message);
+                        }
+                    },
+                );
             },
         );
+    }
+
+    private static function missingPragmaFunction(string $message): bool
+    {
+        return str_contains($message, 'pragma_table_info');
     }
 
     /** @internal Testing hook that forgets per-process verification. */
     public static function forget(): void
     {
         self::$verified = [];
+        self::$legacyColumns = false;
     }
 
     /**
      * @param list<array{ModelSchema, string}> $pending
      */
-    public static function staleTablesSql(array $pending, bool $guarded): string
+    public static function staleTablesSql(array $pending, bool $guarded, bool $legacy = false): string
     {
         // A UNION ALL derived table keeps explicit column names on every SQLite
-        // shipped since Android 8 (VALUES column aliases are not portable).
+        // shipped since Android 7 (VALUES column aliases are not portable).
         $expected = implode(' UNION ALL ', array_map(
             static fn (array $entry): string => 'SELECT '.Sql::literal($entry[0]->table)
                 .' AS "name", '.Sql::literal($entry[1]).' AS "fingerprint"',
@@ -104,10 +154,16 @@ final class SchemaReconciler
         ));
         // Reading sqlite_master pins the statement to the current schema cookie,
         // so pooled read connections never report columns from a stale schema.
-        $sql = 'SELECT e."name" AS "table", CASE WHEN EXISTS ('
-            .'SELECT 1 FROM sqlite_master AS s WHERE s.type = \'table\' AND s.name = e."name"'
-            .') THEN (SELECT group_concat(p.name, \',\') FROM pragma_table_info(e."name") AS p) END AS "columns" '
-            .'FROM ('.$expected.') AS e';
+        $sql = $legacy
+            // SQLite < 3.16: the stored CREATE TABLE text (ALTER TABLE ADD
+            // COLUMN rewrites it), parsed by columnsFromDdl().
+            ? 'SELECT e."name" AS "table", (SELECT s.sql FROM sqlite_master AS s '
+                .'WHERE s.type = \'table\' AND s.name = e."name") AS "ddl" '
+                .'FROM ('.$expected.') AS e'
+            : 'SELECT e."name" AS "table", CASE WHEN EXISTS ('
+                .'SELECT 1 FROM sqlite_master AS s WHERE s.type = \'table\' AND s.name = e."name"'
+                .') THEN (SELECT group_concat(p.name, \',\') FROM pragma_table_info(e."name") AS p) END AS "columns" '
+                .'FROM ('.$expected.') AS e';
         if ($guarded) {
             $sql .= ' WHERE NOT EXISTS (SELECT 1 FROM "'.self::META_TABLE.'" AS m '
                 .'WHERE m."key" = \'schema:\' || e."name" AND m."value" = e."fingerprint")';
@@ -136,6 +192,11 @@ final class SchemaReconciler
             if (!is_string($table)) {
                 continue;
             }
+            if (array_key_exists('ddl', $row)) {
+                $ddl = $row['ddl'];
+                $stale[$table] = is_string($ddl) && $ddl !== '' ? self::columnsFromDdl($ddl) : null;
+                continue;
+            }
             $columns = $row['columns'] ?? null;
             $stale[$table] = is_string($columns) && $columns !== ''
                 ? array_fill_keys(explode(',', $columns), true)
@@ -154,6 +215,72 @@ final class SchemaReconciler
             return;
         }
         $connection->transaction($statements, $verify, $failure);
+    }
+
+    /**
+     * Column names of a CREATE TABLE statement as stored in sqlite_master.
+     *
+     * @return array<string, true>
+     */
+    public static function columnsFromDdl(string $ddl): array
+    {
+        $open = strpos($ddl, '(');
+        $close = strrpos($ddl, ')');
+        if ($open === false || $close === false || $close < $open) {
+            return [];
+        }
+        $body = substr($ddl, $open + 1, $close - $open - 1);
+        $definitions = [];
+        $depth = 0;
+        $quote = null;
+        $start = 0;
+        $length = strlen($body);
+        for ($i = 0; $i < $length; $i++) {
+            $character = $body[$i];
+            if ($quote !== null) {
+                if ($character === $quote) {
+                    if ($quote !== ']' && ($body[$i + 1] ?? '') === $quote) {
+                        $i++;
+                    } else {
+                        $quote = null;
+                    }
+                }
+                continue;
+            }
+            if ($character === '"' || $character === "'" || $character === '`') {
+                $quote = $character;
+            } elseif ($character === '[') {
+                $quote = ']';
+            } elseif ($character === '(') {
+                $depth++;
+            } elseif ($character === ')') {
+                $depth--;
+            } elseif ($character === ',' && $depth === 0) {
+                $definitions[] = substr($body, $start, $i - $start);
+                $start = $i + 1;
+            }
+        }
+        $definitions[] = substr($body, $start);
+        $columns = [];
+        foreach ($definitions as $definition) {
+            $definition = ltrim($definition);
+            if ($definition === '' || preg_match('/^(?:CONSTRAINT|PRIMARY|UNIQUE|CHECK|FOREIGN)\b/i', $definition) === 1) {
+                continue;
+            }
+            $name = match (true) {
+                preg_match('/^"((?:[^"]|"")*)"/', $definition, $match) === 1 => str_replace('""', '"', $match[1]),
+                preg_match('/^`([^`]*)`/', $definition, $match) === 1 => $match[1],
+                preg_match('/^\[([^\]]*)\]/', $definition, $match) === 1 => $match[1],
+                preg_match("/^'((?:[^']|'')*)'/", $definition, $match) === 1 => str_replace("''", "'", $match[1]),
+                preg_match('/^([^\s(]+)/', $definition, $match) === 1 => $match[1],
+                default => null,
+            };
+            if ($name !== null) {
+                $columns[$name] = true;
+            }
+        }
+
+        return $columns;
     }
 
     /**

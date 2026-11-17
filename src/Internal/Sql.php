@@ -123,8 +123,8 @@ final class Sql
      * Every Nitro write provides all model columns, so REPLACE stores the same
      * values as an UPSERT on the primary key and, unlike ON CONFLICT DO UPDATE
      * (SQLite 3.24), runs on every Android version PAM Native supports: the
-     * Android SQLite module uses the platform library, 3.18 on API 26-27 and
-     * 3.22 on API 28-29; 3.24+ only ships from API 30 (Android 11).
+     * Android SQLite module uses the platform library, 3.9 on API 24-25, 3.18
+     * on API 26-27 and 3.22 on API 28-29; 3.24+ only ships from API 30.
      *
      * REPLACE deletes the old row and inserts a new one, so a rewritten row
      * gets a new rowid: order by model columns (Query::orderBy() takes
