@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4 - 2026-11-17
+
+- Fixed: schema reconciliation on SQLite 3.9 (Android 7.x), which lacks `pragma_table_info()`; Nitro falls back to the stored CREATE TABLE text instead of leaving queries waiting forever.
+
 ## 0.5.3 - Unreleased
 
 - `Query::orderBy()` takes several sort keys: each call appends a key after
